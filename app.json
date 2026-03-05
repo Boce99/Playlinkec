@@ -43,7 +43,7 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "http://localhost:3000"
+      "backendUrl": "https://wc23hvzw89jmf7jv5qsgb83jft54us7u.app.specular.dev"
     }
   }
 }
