@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,57 +10,129 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
+import { playerAPI } from '@/utils/api';
+
+interface Club {
+  id: string;
+  name: string;
+}
+
+interface PlayerStats {
+  points: number;
+  eloRating: number;
+  wins: number;
+  losses: number;
+  matchesPlayed: number;
+  setsWon: number;
+  setsLost: number;
+  recentMatches: Array<{ opponent: string; result: string; date: string }>;
+}
 
 export default function ProfileScreen() {
+  const { user, signOut } = useAuth();
   const colorScheme = useColorScheme();
   const theme = colors[colorScheme ?? 'light'];
   const router = useRouter();
-  const { user, signOut } = useAuth();
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [selectedClub, setSelectedClub] = useState<Club | null>(null);
+  const [stats, setStats] = useState<PlayerStats | null>(null);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = useCallback(async () => {
+    console.log('ProfileScreen: Loading player data');
+    try {
+      setLoading(true);
+      
+      const clubsData = await playerAPI.getClubs();
+      setClubs(clubsData);
+      
+      if (clubsData.length > 0 && !selectedClub) {
+        setSelectedClub(clubsData[0]);
+        const statsData = await playerAPI.getUserStats(clubsData[0].id);
+        setStats(statsData);
+      }
+    } catch (error: any) {
+      console.error('ProfileScreen: Error loading data:', error.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [selectedClub]);
+
+  const onRefresh = useCallback(() => {
+    console.log('ProfileScreen: Refreshing data');
+    setRefreshing(true);
+    loadData();
+  }, [loadData]);
+
+  const handleClubChange = async (club: Club) => {
+    console.log('ProfileScreen: Changing club to', club.name);
+    setSelectedClub(club);
+    try {
+      const statsData = await playerAPI.getUserStats(club.id);
+      setStats(statsData);
+    } catch (error: any) {
+      console.error('ProfileScreen: Error loading stats:', error.message);
+    }
+  };
 
   const handleSignOut = async () => {
     console.log('ProfileScreen: User initiated sign out');
-    setSigningOut(true);
     try {
+      setSigningOut(true);
       await signOut();
-      console.log('ProfileScreen: Sign out successful');
       setShowSignOutModal(false);
-    } catch (error) {
-      console.error('ProfileScreen: Sign out error:', error);
+      router.replace('/auth');
+    } catch (error: any) {
+      console.error('ProfileScreen: Error signing out:', error.message);
     } finally {
       setSigningOut(false);
     }
   };
 
-  const userName = user?.name || 'Usuario';
+  const userName = user?.name || user?.email?.split('@')[0] || 'Jugador';
   const userEmail = user?.email || '';
+  const winRate = stats && stats.matchesPlayed > 0 
+    ? ((stats.wins / stats.matchesPlayed) * 100).toFixed(1) 
+    : '0.0';
 
-  // Mock stats - TODO: Backend Integration - GET /api/stats/user
-  const stats = {
-    bookings: 12,
-    clubs: 2,
-    matches: 24,
-    wins: 15,
-    losses: 9,
-    winRate: 62,
-  };
-
-  const winRateText = `${stats.winRate}%`;
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <Stack.Screen options={{ title: 'Perfil', headerShown: true }} />
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
       <Stack.Screen options={{ title: 'Perfil', headerShown: true }} />
-      
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
+        }
+      >
         {/* Profile Header */}
-        <View style={[styles.profileHeader, Platform.OS === 'android' && { paddingTop: 48 }]}>
+        <View style={[styles.profileHeader, { backgroundColor: theme.card }]}>
           <View style={[styles.avatar, { backgroundColor: theme.primary + '20' }]}>
             <Text style={[styles.avatarText, { color: theme.primary }]}>
               {userName.charAt(0).toUpperCase()}
@@ -70,159 +142,193 @@ export default function ProfileScreen() {
           <Text style={[styles.userEmail, { color: theme.textSecondary }]}>{userEmail}</Text>
         </View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.statValue, { color: theme.primary }]}>{stats.bookings}</Text>
-            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Reservas</Text>
+        {/* Club Selector */}
+        {clubs.length > 0 && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Club Seleccionado</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.clubSelector}>
+              {clubs.map((club) => {
+                const isSelected = selectedClub?.id === club.id;
+                
+                return (
+                  <TouchableOpacity
+                    key={club.id}
+                    style={[
+                      styles.clubChip,
+                      { backgroundColor: isSelected ? theme.primary : theme.card },
+                    ]}
+                    onPress={() => handleClubChange(club)}
+                  >
+                    <Text
+                      style={[
+                        styles.clubChipText,
+                        { color: isSelected ? '#FFFFFF' : theme.text },
+                      ]}
+                    >
+                      {club.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
-          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.statValue, { color: theme.secondary }]}>{stats.clubs}</Text>
-            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Clubes</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.statValue, { color: theme.accent }]}>{stats.matches}</Text>
-            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Partidos</Text>
-          </View>
-        </View>
+        )}
 
-        {/* Performance Stats */}
-        <View style={[styles.performanceCard, { backgroundColor: theme.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Rendimiento</Text>
-          <View style={styles.performanceRow}>
-            <View style={styles.performanceStat}>
-              <Text style={[styles.performanceValue, { color: theme.success }]}>{stats.wins}</Text>
-              <Text style={[styles.performanceLabel, { color: theme.textSecondary }]}>Victorias</Text>
-            </View>
-            <View style={styles.performanceStat}>
-              <Text style={[styles.performanceValue, { color: theme.error }]}>{stats.losses}</Text>
-              <Text style={[styles.performanceLabel, { color: theme.textSecondary }]}>Derrotas</Text>
-            </View>
-            <View style={styles.performanceStat}>
-              <Text style={[styles.performanceValue, { color: theme.primary }]}>{winRateText}</Text>
-              <Text style={[styles.performanceLabel, { color: theme.textSecondary }]}>% Victoria</Text>
-            </View>
-          </View>
-        </View>
+        {/* Stats Overview */}
+        {stats && (
+          <>
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Estadísticas</Text>
+              <View style={styles.statsGrid}>
+                <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                  <IconSymbol
+                    ios_icon_name="star.fill"
+                    android_material_icon_name="star"
+                    size={24}
+                    color={theme.accent}
+                  />
+                  <Text style={[styles.statValue, { color: theme.text }]}>{stats.points}</Text>
+                  <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Puntos</Text>
+                </View>
 
-        {/* Menu Items */}
-        <View style={styles.menuSection}>
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: theme.card }]}
-            onPress={() => router.push('/clubs')}
-          >
-            <View style={styles.menuItemLeft}>
-              <IconSymbol
-                ios_icon_name="building.2.fill"
-                android_material_icon_name="business"
-                size={24}
-                color={theme.primary}
-              />
-              <Text style={[styles.menuItemText, { color: theme.text }]}>Mis Clubes</Text>
-            </View>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={20}
-              color={theme.textSecondary}
-            />
-          </TouchableOpacity>
+                <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                  <IconSymbol
+                    ios_icon_name="chart.bar.fill"
+                    android_material_icon_name="bar-chart"
+                    size={24}
+                    color={theme.secondary}
+                  />
+                  <Text style={[styles.statValue, { color: theme.text }]}>{stats.eloRating}</Text>
+                  <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Rating ELO</Text>
+                </View>
 
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: theme.card }]}
-            onPress={() => router.push('/ranking')}
-          >
-            <View style={styles.menuItemLeft}>
-              <IconSymbol
-                ios_icon_name="chart.bar.fill"
-                android_material_icon_name="bar-chart"
-                size={24}
-                color={theme.secondary}
-              />
-              <Text style={[styles.menuItemText, { color: theme.text }]}>Ranking</Text>
-            </View>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={20}
-              color={theme.textSecondary}
-            />
-          </TouchableOpacity>
+                <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                  <IconSymbol
+                    ios_icon_name="trophy.fill"
+                    android_material_icon_name="emoji-events"
+                    size={24}
+                    color={theme.success}
+                  />
+                  <Text style={[styles.statValue, { color: theme.text }]}>{stats.wins}</Text>
+                  <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Victorias</Text>
+                </View>
 
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: theme.card }]}
-            onPress={() => router.push('/stats')}
-          >
-            <View style={styles.menuItemLeft}>
-              <IconSymbol
-                ios_icon_name="chart.line.uptrend.xyaxis"
-                android_material_icon_name="show-chart"
-                size={24}
-                color={theme.accent}
-              />
-              <Text style={[styles.menuItemText, { color: theme.text }]}>Estadísticas</Text>
+                <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+                  <IconSymbol
+                    ios_icon_name="xmark.circle.fill"
+                    android_material_icon_name="cancel"
+                    size={24}
+                    color={theme.error}
+                  />
+                  <Text style={[styles.statValue, { color: theme.text }]}>{stats.losses}</Text>
+                  <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Derrotas</Text>
+                </View>
+              </View>
             </View>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={20}
-              color={theme.textSecondary}
-            />
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: theme.card }]}
-            onPress={() => router.push('/settings')}
-          >
-            <View style={styles.menuItemLeft}>
-              <IconSymbol
-                ios_icon_name="gear"
-                android_material_icon_name="settings"
-                size={24}
-                color={theme.textSecondary}
-              />
-              <Text style={[styles.menuItemText, { color: theme.text }]}>Ajustes</Text>
+            {/* Performance */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Rendimiento</Text>
+              <View style={[styles.performanceCard, { backgroundColor: theme.card }]}>
+                <View style={styles.performanceRow}>
+                  <Text style={[styles.performanceLabel, { color: theme.textSecondary }]}>
+                    Partidos Jugados
+                  </Text>
+                  <Text style={[styles.performanceValue, { color: theme.text }]}>
+                    {stats.matchesPlayed}
+                  </Text>
+                </View>
+                <View style={styles.performanceRow}>
+                  <Text style={[styles.performanceLabel, { color: theme.textSecondary }]}>
+                    Tasa de Victoria
+                  </Text>
+                  <Text style={[styles.performanceValue, { color: theme.text }]}>
+                    {winRate}
+                  </Text>
+                  <Text style={[styles.performanceValue, { color: theme.text }]}>%</Text>
+                </View>
+                <View style={styles.performanceRow}>
+                  <Text style={[styles.performanceLabel, { color: theme.textSecondary }]}>
+                    Sets Ganados
+                  </Text>
+                  <Text style={[styles.performanceValue, { color: theme.text }]}>
+                    {stats.setsWon}
+                  </Text>
+                </View>
+                <View style={styles.performanceRow}>
+                  <Text style={[styles.performanceLabel, { color: theme.textSecondary }]}>
+                    Sets Perdidos
+                  </Text>
+                  <Text style={[styles.performanceValue, { color: theme.text }]}>
+                    {stats.setsLost}
+                  </Text>
+                </View>
+              </View>
             </View>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={20}
-              color={theme.textSecondary}
-            />
-          </TouchableOpacity>
-        </View>
+
+            {/* Recent Matches */}
+            {stats.recentMatches && stats.recentMatches.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Partidos Recientes</Text>
+                {stats.recentMatches.map((match, index) => {
+                  const isWin = match.result === 'win';
+                  const resultColor = isWin ? theme.success : theme.error;
+                  const resultText = isWin ? 'Victoria' : 'Derrota';
+                  
+                  return (
+                    <View key={index} style={[styles.matchCard, { backgroundColor: theme.card }]}>
+                      <View style={styles.matchInfo}>
+                        <Text style={[styles.matchOpponent, { color: theme.text }]}>
+                          vs
+                        </Text>
+                        <Text style={[styles.matchOpponent, { color: theme.text }]}>
+                          {match.opponent}
+                        </Text>
+                      </View>
+                      <View style={styles.matchDetails}>
+                        <View style={[styles.matchResult, { backgroundColor: resultColor + '20' }]}>
+                          <Text style={[styles.matchResultText, { color: resultColor }]}>
+                            {resultText}
+                          </Text>
+                        </View>
+                        <Text style={[styles.matchDate, { color: theme.textSecondary }]}>
+                          {match.date}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        )}
 
         {/* Sign Out Button */}
         <TouchableOpacity
-          style={[styles.signOutButton, { backgroundColor: theme.error + '15' }]}
+          style={[styles.signOutButton, { backgroundColor: theme.error }]}
           onPress={() => setShowSignOutModal(true)}
         >
           <IconSymbol
-            ios_icon_name="rectangle.portrait.and.arrow.right"
+            ios_icon_name="arrow.right.square"
             android_material_icon_name="logout"
             size={20}
-            color={theme.error}
+            color="#FFFFFF"
           />
-          <Text style={[styles.signOutText, { color: theme.error }]}>Cerrar Sesión</Text>
+          <Text style={styles.signOutButtonText}>Cerrar Sesión</Text>
         </TouchableOpacity>
       </ScrollView>
 
       {/* Sign Out Confirmation Modal */}
-      <Modal
-        visible={showSignOutModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowSignOutModal(false)}
-      >
+      <Modal visible={showSignOutModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Cerrar Sesión</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>¿Cerrar Sesión?</Text>
             <Text style={[styles.modalMessage, { color: theme.textSecondary }]}>
-              ¿Estás seguro que quieres cerrar sesión?
+              ¿Estás seguro de que deseas cerrar sesión?
             </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: theme.border }]}
+                style={[styles.modalButton, { backgroundColor: theme.background }]}
                 onPress={() => setShowSignOutModal(false)}
                 disabled={signingOut}
               >
@@ -255,18 +361,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 24,
+    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
   },
   profileHeader: {
     alignItems: 'center',
-    paddingVertical: 32,
+    padding: 32,
+    marginHorizontal: 20,
+    marginTop: Platform.OS === 'android' ? 48 : 20,
+    marginBottom: 24,
+    borderRadius: 16,
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
   },
   avatarText: {
@@ -281,100 +391,116 @@ const styles = StyleSheet.create({
   userEmail: {
     fontSize: 14,
   },
-  statsContainer: {
-    flexDirection: 'row',
+  section: {
     paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 20,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  statValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-  },
-  performanceCard: {
-    marginHorizontal: 20,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  clubSelector: {
+    flexDirection: 'row',
+  },
+  clubChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 8,
+  },
+  clubChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: '47%',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginTop: 8,
+  },
+  statLabel: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  performanceCard: {
+    padding: 16,
+    borderRadius: 12,
   },
   performanceRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  performanceStat: {
-    alignItems: 'center',
-  },
-  performanceValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    gap: 8,
   },
   performanceLabel: {
-    fontSize: 12,
+    fontSize: 15,
+    flex: 1,
   },
-  menuSection: {
-    paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 20,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  menuItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  menuItemText: {
-    fontSize: 16,
+  performanceValue: {
+    fontSize: 15,
     fontWeight: '600',
+  },
+  matchCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  matchInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  matchOpponent: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  matchDetails: {
+    alignItems: 'flex-end',
+  },
+  matchResult: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  matchResultText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  matchDate: {
+    fontSize: 12,
   },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginHorizontal: 20,
-    borderRadius: 12,
+    marginBottom: 24,
     padding: 16,
+    borderRadius: 12,
     gap: 8,
   },
-  signOutText: {
+  signOutButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   modalOverlay: {
     flex: 1,
@@ -386,8 +512,8 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '100%',
     maxWidth: 400,
-    borderRadius: 20,
     padding: 24,
+    borderRadius: 16,
   },
   modalTitle: {
     fontSize: 20,
@@ -396,10 +522,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   modalMessage: {
-    fontSize: 16,
+    fontSize: 15,
     marginBottom: 24,
     textAlign: 'center',
-    lineHeight: 24,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -407,12 +532,12 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    paddingVertical: 14,
+    padding: 14,
     borderRadius: 12,
     alignItems: 'center',
   },
   modalButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
 });
