@@ -39,7 +39,7 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const appColors = colorScheme === 'dark' ? colors.dark : colors.light;
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
@@ -47,17 +47,9 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    console.log('HomeScreen mounted, user:', user);
-    if (!authLoading) {
-      if (!user) {
-        console.log('No user found, redirecting to auth');
-        router.replace('/auth');
-      } else {
-        console.log('User authenticated, loading data');
-        loadData();
-      }
-    }
-  }, [user, authLoading]);
+    console.log('HomeScreen mounted, user:', user?.name || user?.email);
+    loadData();
+  }, []);
 
   const loadData = async () => {
     try {
@@ -82,7 +74,7 @@ export default function HomeScreen() {
     loadData();
   };
 
-  if (authLoading || loading) {
+  if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
         <Stack.Screen
