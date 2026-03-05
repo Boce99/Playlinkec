@@ -1,5 +1,9 @@
 
+import { useAuth } from '@/contexts/AuthContext';
+import { colors } from '@/styles/commonStyles';
+import { Stack, useRouter } from 'expo-router';
 import React, { useState, useEffect, useCallback } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -11,11 +15,8 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/IconSymbol';
-import { colors } from '@/styles/commonStyles';
+import { playerAPI } from '@/utils/api';
 
 interface Booking {
   id: string;
@@ -31,73 +32,58 @@ interface Booking {
 interface Club {
   id: string;
   name: string;
-  address: string;
-  city: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  role: string;
 }
 
 interface Notification {
   id: string;
   title: string;
-  message: string;
+  body: string;
   type: string;
-  read: boolean;
+  isRead: boolean;
   createdAt: string;
 }
 
 export default function HomeScreen() {
-  const colorScheme = useColorScheme();
-  const theme = colors[colorScheme ?? 'light'];
   const router = useRouter();
   const { user } = useAuth();
-  
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [upcomingBookings, setUpcomingBookings] = useState<Booking[]>([]);
-  const [myClubs, setMyClubs] = useState<Club[]>([]);
+  const [clubs, setClubs] = useState<Club[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const loadData = useCallback(async () => {
     console.log('HomeScreen: Loading data for user', user?.email);
     try {
-      // TODO: Backend Integration - GET /api/bookings to fetch upcoming bookings
-      // TODO: Backend Integration - GET /api/clubs/my-clubs to fetch user's clubs
-      // TODO: Backend Integration - GET /api/notifications to fetch notifications
-      
-      // Mock data for now
-      setUpcomingBookings([
-        {
-          id: '1',
-          clubName: 'Club Padel Central',
-          courtName: 'Cancha 1',
-          bookingDate: '2024-01-20',
-          startTime: '18:00',
-          endTime: '19:30',
-          status: 'confirmed',
-          qrCode: 'QR123456',
-        },
-      ]);
-      
-      setMyClubs([
-        {
-          id: '1',
-          name: 'Club Padel Central',
-          address: 'Av. Principal 123',
-          city: 'Quito',
-        },
-      ]);
-      
-      setNotifications([
-        {
-          id: '1',
-          title: 'Reserva confirmada',
-          message: 'Tu reserva para mañana a las 18:00 está confirmada',
-          type: 'booking_created',
-          read: false,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
-    } catch (error) {
-      console.error('HomeScreen: Error loading data:', error);
+      setLoading(true);
+
+      // Fetch user's clubs
+      const clubsData = await playerAPI.getClubs();
+      console.log('HomeScreen: Loaded clubs:', clubsData.length);
+      setClubs(clubsData);
+
+      // Fetch upcoming bookings
+      const bookingsData = await playerAPI.getBookings();
+      const upcoming = bookingsData
+        .filter(b => b.status === 'confirmed' || b.status === 'checked_in')
+        .slice(0, 3);
+      console.log('HomeScreen: Loaded upcoming bookings:', upcoming.length);
+      setUpcomingBookings(upcoming);
+
+      // Fetch notifications
+      const notificationsData = await playerAPI.getNotifications();
+      const unread = notificationsData.filter(n => !n.isRead).slice(0, 3);
+      console.log('HomeScreen: Loaded unread notifications:', unread.length);
+      setNotifications(unread);
+    } catch (error: any) {
+      console.error('HomeScreen: Error loading data:', error.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -109,52 +95,78 @@ export default function HomeScreen() {
   }, [loadData]);
 
   const onRefresh = useCallback(() => {
-    console.log('HomeScreen: Refreshing data');
+    console.log('HomeScreen: User triggered refresh');
     setRefreshing(true);
     loadData();
   }, [loadData]);
 
-  const userName = user?.name || 'Jugador';
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-ES', { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+
+  const formatTime = (timeString: string) => {
+    return timeString;
+  };
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors[colorScheme ?? 'light'].background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ActivityIndicator size="large" color={theme.primary} />
-      </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors[colorScheme ?? 'light'].primary} />
+          <Text style={[styles.loadingText, { color: colors[colorScheme ?? 'light'].text }]}>
+            Cargando...
+          </Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
+  const userName = user?.name || user?.email?.split('@')[0] || 'Jugador';
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors[colorScheme ?? 'light'].background }]}>
       <Stack.Screen options={{ headerShown: false }} />
       
       <ScrollView
         style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors[colorScheme ?? 'light'].primary}
+          />
         }
       >
         {/* Header */}
-        <View style={[styles.header, Platform.OS === 'android' && { paddingTop: 48 }]}>
+        <View style={styles.header}>
           <View>
-            <Text style={[styles.greeting, { color: theme.textSecondary }]}>Hola,</Text>
-            <Text style={[styles.userName, { color: theme.text }]}>{userName}</Text>
+            <Text style={[styles.greeting, { color: colors[colorScheme ?? 'light'].textSecondary }]}>
+              Hola,
+            </Text>
+            <Text style={[styles.userName, { color: colors[colorScheme ?? 'light'].text }]}>
+              {userName}
+            </Text>
           </View>
           <TouchableOpacity
-            style={styles.notificationButton}
+            style={[styles.notificationButton, { backgroundColor: colors[colorScheme ?? 'light'].card }]}
             onPress={() => router.push('/notifications')}
           >
             <IconSymbol
               ios_icon_name="bell.fill"
               android_material_icon_name="notifications"
               size={24}
-              color={theme.text}
+              color={colors[colorScheme ?? 'light'].text}
             />
-            {unreadCount > 0 && (
-              <View style={[styles.badge, { backgroundColor: theme.error }]}>
-                <Text style={styles.badgeText}>{unreadCount}</Text>
+            {notifications.length > 0 && (
+              <View style={[styles.badge, { backgroundColor: colors[colorScheme ?? 'light'].error }]}>
+                <Text style={styles.badgeText}>{notifications.length}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -162,51 +174,59 @@ export default function HomeScreen() {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Acciones Rápidas</Text>
+          <Text style={[styles.sectionTitle, { color: colors[colorScheme ?? 'light'].text }]}>
+            Acciones Rápidas
+          </Text>
           <View style={styles.quickActions}>
             <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: theme.card }]}
-              onPress={() => router.push('/booking/new')}
+              style={[styles.actionCard, { backgroundColor: colors[colorScheme ?? 'light'].card }]}
+              onPress={() => router.push('/(tabs)/bookings')}
             >
-              <View style={[styles.actionIcon, { backgroundColor: theme.primary + '20' }]}>
+              <View style={[styles.actionIcon, { backgroundColor: colors[colorScheme ?? 'light'].primary + '20' }]}>
                 <IconSymbol
-                  ios_icon_name="calendar.badge.plus"
-                  android_material_icon_name="add-circle"
+                  ios_icon_name="calendar"
+                  android_material_icon_name="calendar-today"
                   size={28}
-                  color={theme.primary}
+                  color={colors[colorScheme ?? 'light'].primary}
                 />
               </View>
-              <Text style={[styles.actionText, { color: theme.text }]}>Nueva Reserva</Text>
+              <Text style={[styles.actionText, { color: colors[colorScheme ?? 'light'].text }]}>
+                Reservar
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: theme.card }]}
-              onPress={() => router.push('/clubs')}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: theme.secondary + '20' }]}>
-                <IconSymbol
-                  ios_icon_name="building.2.fill"
-                  android_material_icon_name="business"
-                  size={28}
-                  color={theme.secondary}
-                />
-              </View>
-              <Text style={[styles.actionText, { color: theme.text }]}>Mis Clubes</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: theme.card }]}
+              style={[styles.actionCard, { backgroundColor: colors[colorScheme ?? 'light'].card }]}
               onPress={() => router.push('/(tabs)/tournaments')}
             >
-              <View style={[styles.actionIcon, { backgroundColor: theme.accent + '20' }]}>
+              <View style={[styles.actionIcon, { backgroundColor: colors[colorScheme ?? 'light'].secondary + '20' }]}>
                 <IconSymbol
                   ios_icon_name="trophy.fill"
                   android_material_icon_name="emoji-events"
                   size={28}
-                  color={theme.accent}
+                  color={colors[colorScheme ?? 'light'].secondary}
                 />
               </View>
-              <Text style={[styles.actionText, { color: theme.text }]}>Torneos</Text>
+              <Text style={[styles.actionText, { color: colors[colorScheme ?? 'light'].text }]}>
+                Torneos
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: colors[colorScheme ?? 'light'].card }]}
+              onPress={() => router.push('/(tabs)/profile')}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: colors[colorScheme ?? 'light'].accent + '20' }]}>
+                <IconSymbol
+                  ios_icon_name="chart.bar.fill"
+                  android_material_icon_name="bar-chart"
+                  size={28}
+                  color={colors[colorScheme ?? 'light'].accent}
+                />
+              </View>
+              <Text style={[styles.actionText, { color: colors[colorScheme ?? 'light'].text }]}>
+                Ranking
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -214,54 +234,56 @@ export default function HomeScreen() {
         {/* Upcoming Bookings */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Próximas Reservas</Text>
+            <Text style={[styles.sectionTitle, { color: colors[colorScheme ?? 'light'].text }]}>
+              Próximas Reservas
+            </Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/bookings')}>
-              <Text style={[styles.seeAll, { color: theme.primary }]}>Ver todas</Text>
+              <Text style={[styles.seeAllText, { color: colors[colorScheme ?? 'light'].primary }]}>
+                Ver todas
+              </Text>
             </TouchableOpacity>
           </View>
-          
+
           {upcomingBookings.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: theme.card }]}>
+            <View style={[styles.emptyCard, { backgroundColor: colors[colorScheme ?? 'light'].card }]}>
               <IconSymbol
                 ios_icon_name="calendar"
                 android_material_icon_name="calendar-today"
                 size={48}
-                color={theme.textSecondary}
+                color={colors[colorScheme ?? 'light'].textSecondary}
               />
-              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+              <Text style={[styles.emptyText, { color: colors[colorScheme ?? 'light'].textSecondary }]}>
                 No tienes reservas próximas
               </Text>
               <TouchableOpacity
-                style={[styles.emptyButton, { backgroundColor: theme.primary }]}
-                onPress={() => router.push('/booking/new')}
+                style={[styles.emptyButton, { backgroundColor: colors[colorScheme ?? 'light'].primary }]}
+                onPress={() => router.push('/(tabs)/bookings')}
               >
                 <Text style={styles.emptyButtonText}>Hacer una reserva</Text>
               </TouchableOpacity>
             </View>
           ) : (
             upcomingBookings.map((booking) => {
-              const dateText = booking.bookingDate;
-              const timeText = `${booking.startTime} - ${booking.endTime}`;
+              const dateDisplay = formatDate(booking.bookingDate);
+              const startTimeDisplay = formatTime(booking.startTime);
+              const endTimeDisplay = formatTime(booking.endTime);
               
               return (
-                <TouchableOpacity
+                <View
                   key={booking.id}
-                  style={[styles.bookingCard, { backgroundColor: theme.card }]}
-                  onPress={() => router.push(`/booking/${booking.id}`)}
+                  style={[styles.bookingCard, { backgroundColor: colors[colorScheme ?? 'light'].card }]}
                 >
                   <View style={styles.bookingHeader}>
-                    <View style={[styles.statusBadge, { backgroundColor: theme.success + '20' }]}>
-                      <Text style={[styles.statusText, { color: theme.success }]}>Confirmada</Text>
+                    <Text style={[styles.bookingClub, { color: colors[colorScheme ?? 'light'].text }]}>
+                      {booking.clubName}
+                    </Text>
+                    <View style={[styles.statusBadge, { backgroundColor: colors[colorScheme ?? 'light'].success + '20' }]}>
+                      <Text style={[styles.statusText, { color: colors[colorScheme ?? 'light'].success }]}>
+                        Confirmada
+                      </Text>
                     </View>
-                    <IconSymbol
-                      ios_icon_name="qrcode"
-                      android_material_icon_name="qr-code"
-                      size={24}
-                      color={theme.primary}
-                    />
                   </View>
-                  <Text style={[styles.bookingClub, { color: theme.text }]}>{booking.clubName}</Text>
-                  <Text style={[styles.bookingCourt, { color: theme.textSecondary }]}>
+                  <Text style={[styles.bookingCourt, { color: colors[colorScheme ?? 'light'].textSecondary }]}>
                     {booking.courtName}
                   </Text>
                   <View style={styles.bookingDetails}>
@@ -270,10 +292,10 @@ export default function HomeScreen() {
                         ios_icon_name="calendar"
                         android_material_icon_name="calendar-today"
                         size={16}
-                        color={theme.textSecondary}
+                        color={colors[colorScheme ?? 'light'].textSecondary}
                       />
-                      <Text style={[styles.bookingDetailText, { color: theme.textSecondary }]}>
-                        {dateText}
+                      <Text style={[styles.bookingDetailText, { color: colors[colorScheme ?? 'light'].textSecondary }]}>
+                        {dateDisplay}
                       </Text>
                     </View>
                     <View style={styles.bookingDetail}>
@@ -281,14 +303,20 @@ export default function HomeScreen() {
                         ios_icon_name="clock"
                         android_material_icon_name="access-time"
                         size={16}
-                        color={theme.textSecondary}
+                        color={colors[colorScheme ?? 'light'].textSecondary}
                       />
-                      <Text style={[styles.bookingDetailText, { color: theme.textSecondary }]}>
-                        {timeText}
+                      <Text style={[styles.bookingDetailText, { color: colors[colorScheme ?? 'light'].textSecondary }]}>
+                        {startTimeDisplay}
+                      </Text>
+                      <Text style={[styles.bookingDetailText, { color: colors[colorScheme ?? 'light'].textSecondary }]}>
+                        -
+                      </Text>
+                      <Text style={[styles.bookingDetailText, { color: colors[colorScheme ?? 'light'].textSecondary }]}>
+                        {endTimeDisplay}
                       </Text>
                     </View>
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             })
           )}
@@ -296,42 +324,54 @@ export default function HomeScreen() {
 
         {/* My Clubs */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Mis Clubes</Text>
-            <TouchableOpacity onPress={() => router.push('/clubs')}>
-              <Text style={[styles.seeAll, { color: theme.primary }]}>Ver todos</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {myClubs.map((club) => (
-            <TouchableOpacity
-              key={club.id}
-              style={[styles.clubCard, { backgroundColor: theme.card }]}
-              onPress={() => router.push(`/club/${club.id}`)}
-            >
-              <View style={[styles.clubIcon, { backgroundColor: theme.primary + '20' }]}>
+          <Text style={[styles.sectionTitle, { color: colors[colorScheme ?? 'light'].text }]}>
+            Mis Clubes
+          </Text>
+          {clubs.length === 0 ? (
+            <View style={[styles.emptyCard, { backgroundColor: colors[colorScheme ?? 'light'].card }]}>
+              <IconSymbol
+                ios_icon_name="building.2"
+                android_material_icon_name="business"
+                size={48}
+                color={colors[colorScheme ?? 'light'].textSecondary}
+              />
+              <Text style={[styles.emptyText, { color: colors[colorScheme ?? 'light'].textSecondary }]}>
+                No perteneces a ningún club
+              </Text>
+            </View>
+          ) : (
+            clubs.map((club) => (
+              <View
+                key={club.id}
+                style={[styles.clubCard, { backgroundColor: colors[colorScheme ?? 'light'].card }]}
+              >
+                <View style={[styles.clubIcon, { backgroundColor: colors[colorScheme ?? 'light'].primary + '20' }]}>
+                  <IconSymbol
+                    ios_icon_name="building.2"
+                    android_material_icon_name="business"
+                    size={24}
+                    color={colors[colorScheme ?? 'light'].primary}
+                  />
+                </View>
+                <View style={styles.clubInfo}>
+                  <Text style={[styles.clubName, { color: colors[colorScheme ?? 'light'].text }]}>
+                    {club.name}
+                  </Text>
+                  {club.address && (
+                    <Text style={[styles.clubAddress, { color: colors[colorScheme ?? 'light'].textSecondary }]}>
+                      {club.address}
+                    </Text>
+                  )}
+                </View>
                 <IconSymbol
-                  ios_icon_name="building.2.fill"
-                  android_material_icon_name="business"
-                  size={24}
-                  color={theme.primary}
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="chevron-right"
+                  size={20}
+                  color={colors[colorScheme ?? 'light'].textSecondary}
                 />
               </View>
-              <View style={styles.clubInfo}>
-                <Text style={[styles.clubName, { color: theme.text }]}>{club.name}</Text>
-                <Text style={[styles.clubAddress, { color: theme.textSecondary }]}>
-                  {club.address}
-                </Text>
-                <Text style={[styles.clubCity, { color: theme.textSecondary }]}>{club.city}</Text>
-              </View>
-              <IconSymbol
-                ios_icon_name="chevron.right"
-                android_material_icon_name="chevron-right"
-                size={20}
-                color={theme.textSecondary}
-              />
-            </TouchableOpacity>
-          ))}
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -342,42 +382,58 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+  },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: Platform.OS === 'android' ? 48 : 20,
+    paddingBottom: 20,
   },
   greeting: {
     fontSize: 16,
-    marginBottom: 4,
   },
   userName: {
     fontSize: 28,
     fontWeight: 'bold',
+    marginTop: 4,
   },
   notificationButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
     position: 'relative',
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 18,
+    top: 8,
+    right: 8,
+    width: 18,
     height: 18,
     borderRadius: 9,
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    alignItems: 'center',
   },
   badgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
+    color: '#fff',
+    fontSize: 10,
     fontWeight: 'bold',
   },
   section: {
@@ -393,95 +449,80 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+    marginBottom: 16,
   },
-  seeAll: {
+  seeAllText: {
     fontSize: 14,
     fontWeight: '600',
   },
   quickActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
   },
   actionCard: {
     flex: 1,
-    borderRadius: 16,
+    marginHorizontal: 4,
     padding: 16,
+    borderRadius: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
   actionIcon: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    alignItems: 'center',
+    marginBottom: 8,
   },
   actionText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
   },
   emptyCard: {
-    borderRadius: 16,
     padding: 32,
+    borderRadius: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
   emptyText: {
     fontSize: 16,
-    marginTop: 16,
-    marginBottom: 20,
+    marginTop: 12,
+    marginBottom: 16,
     textAlign: 'center',
   },
   emptyButton: {
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 8,
   },
   emptyButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '600',
   },
   bookingCard: {
-    borderRadius: 16,
     padding: 16,
+    borderRadius: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
   bookingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
+    marginBottom: 8,
   },
   bookingClub: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 4,
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   bookingCourt: {
     fontSize: 14,
@@ -502,21 +543,16 @@ const styles = StyleSheet.create({
   clubCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
     padding: 16,
+    borderRadius: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
   },
   clubIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   clubInfo: {
@@ -524,14 +560,10 @@ const styles = StyleSheet.create({
   },
   clubName: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginBottom: 4,
   },
   clubAddress: {
-    fontSize: 13,
-    marginBottom: 2,
-  },
-  clubCity: {
-    fontSize: 13,
+    fontSize: 14,
   },
 });

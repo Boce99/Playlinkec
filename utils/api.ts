@@ -1,235 +1,350 @@
-import Constants from "expo-constants";
-import { Platform } from "react-native";
-import * as SecureStore from "expo-secure-store";
+
 import { BEARER_TOKEN_KEY } from "@/lib/auth";
+import Constants from "expo-constants";
+import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 
-/**
- * Backend URL is configured in app.json under expo.extra.backendUrl
- * It is set automatically when the backend is deployed
- */
-export const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl || "";
+const API_URL = Constants.expoConfig?.extra?.backendUrl || "http://localhost:3000";
 
-/**
- * Check if backend is properly configured
- */
-export const isBackendConfigured = (): boolean => {
-  return !!BACKEND_URL && BACKEND_URL.length > 0;
-};
-
-/**
- * Get bearer token from platform-specific storage
- * Web: localStorage
- * Native: SecureStore
- *
- * @returns Bearer token or null if not found
- */
-export const getBearerToken = async (): Promise<string | null> => {
+async function getAuthToken(): Promise<string | null> {
   try {
     if (Platform.OS === "web") {
       return localStorage.getItem(BEARER_TOKEN_KEY);
-    } else {
-      return await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
     }
+    return await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
   } catch (error) {
-    console.error("[API] Error retrieving bearer token:", error);
+    console.error("Error getting auth token:", error);
     return null;
   }
-};
+}
 
-/**
- * Generic API call helper with error handling
- *
- * @param endpoint - API endpoint path (e.g., '/users', '/auth/login')
- * @param options - Fetch options (method, headers, body, etc.)
- * @returns Parsed JSON response
- * @throws Error if backend is not configured or request fails
- */
-export const apiCall = async <T = any>(
+async function apiRequest<T>(
   endpoint: string,
-  options?: RequestInit
-): Promise<T> => {
-  if (!isBackendConfigured()) {
-    throw new Error("Backend URL not configured. Please rebuild the app.");
-  }
-
-  const url = `${BACKEND_URL}${endpoint}`;
-  console.log("[API] Calling:", url, options?.method || "GET");
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${API_URL}${endpoint}`;
+  console.log(`API Request: ${options.method || "GET"} ${url}`);
 
   try {
-    const fetchOptions: RequestInit = {
+    const response = await fetch(url, {
       ...options,
       headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
+        ...options.headers,
       },
-    };
+    });
 
-    console.log("[API] Fetch options:", fetchOptions);
-
-    // Always send the token if we have it (needed for cross-domain/iframe support)
-    const token = await getBearerToken();
-    if (token) {
-      fetchOptions.headers = {
-        ...fetchOptions.headers,
-        Authorization: `Bearer ${token}`,
-      };
-    }
-
-    const response = await fetch(url, fetchOptions);
+    console.log(`API Response: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
-      const text = await response.text();
-      console.error("[API] Error response:", response.status, text);
-      throw new Error(`API error: ${response.status} - ${text}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
     }
 
     const data = await response.json();
-    console.log("[API] Success:", data);
     return data;
-  } catch (error) {
-    console.error("[API] Request failed:", error);
+  } catch (error: any) {
+    console.error(`API Error for ${endpoint}:`, error.message);
     throw error;
   }
-};
+}
 
-/**
- * GET request helper
- */
-export const apiGet = async <T = any>(endpoint: string): Promise<T> => {
-  return apiCall<T>(endpoint, { method: "GET" });
-};
-
-/**
- * POST request helper
- */
-export const apiPost = async <T = any>(
+async function authenticatedRequest<T>(
   endpoint: string,
-  data: any
-): Promise<T> => {
-  return apiCall<T>(endpoint, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-};
-
-/**
- * PUT request helper
- */
-export const apiPut = async <T = any>(
-  endpoint: string,
-  data: any
-): Promise<T> => {
-  return apiCall<T>(endpoint, {
-    method: "PUT",
-    body: JSON.stringify(data),
-  });
-};
-
-/**
- * PATCH request helper
- */
-export const apiPatch = async <T = any>(
-  endpoint: string,
-  data: any
-): Promise<T> => {
-  return apiCall<T>(endpoint, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-};
-
-/**
- * DELETE request helper
- * Always sends a body to avoid FST_ERR_CTP_EMPTY_JSON_BODY errors
- */
-export const apiDelete = async <T = any>(endpoint: string, data: any = {}): Promise<T> => {
-  return apiCall<T>(endpoint, {
-    method: "DELETE",
-    body: JSON.stringify(data),
-  });
-};
-
-/**
- * Authenticated API call helper
- * Automatically retrieves bearer token from storage and adds to Authorization header
- *
- * @param endpoint - API endpoint path
- * @param options - Fetch options (method, headers, body, etc.)
- * @returns Parsed JSON response
- * @throws Error if token not found or request fails
- */
-export const authenticatedApiCall = async <T = any>(
-  endpoint: string,
-  options?: RequestInit
-): Promise<T> => {
-  const token = await getBearerToken();
-
+  options: RequestInit = {}
+): Promise<T> {
+  const token = await getAuthToken();
   if (!token) {
-    throw new Error("Authentication token not found. Please sign in.");
+    throw new Error("No authentication token found");
   }
 
-  return apiCall<T>(endpoint, {
+  return apiRequest<T>(endpoint, {
     ...options,
     headers: {
-      ...options?.headers,
+      ...options.headers,
       Authorization: `Bearer ${token}`,
     },
   });
-};
+}
 
-/**
- * Authenticated GET request
- */
-export const authenticatedGet = async <T = any>(endpoint: string): Promise<T> => {
-  return authenticatedApiCall<T>(endpoint, { method: "GET" });
-};
+// Public API methods
+export async function apiGet<T>(endpoint: string): Promise<T> {
+  return apiRequest<T>(endpoint, { method: "GET" });
+}
 
-/**
- * Authenticated POST request
- */
-export const authenticatedPost = async <T = any>(
-  endpoint: string,
-  data: any
-): Promise<T> => {
-  return authenticatedApiCall<T>(endpoint, {
+export async function apiPost<T>(endpoint: string, data?: any): Promise<T> {
+  return apiRequest<T>(endpoint, {
     method: "POST",
-    body: JSON.stringify(data),
+    headers: { "Content-Type": "application/json" },
+    body: data ? JSON.stringify(data) : JSON.stringify({}),
   });
-};
+}
 
-/**
- * Authenticated PUT request
- */
-export const authenticatedPut = async <T = any>(
-  endpoint: string,
-  data: any
-): Promise<T> => {
-  return authenticatedApiCall<T>(endpoint, {
+// Authenticated API methods
+export async function authenticatedGet<T>(endpoint: string): Promise<T> {
+  return authenticatedRequest<T>(endpoint, { method: "GET" });
+}
+
+export async function authenticatedPost<T>(endpoint: string, data?: any): Promise<T> {
+  return authenticatedRequest<T>(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: data ? JSON.stringify(data) : JSON.stringify({}),
+  });
+}
+
+export async function authenticatedPut<T>(endpoint: string, data?: any): Promise<T> {
+  return authenticatedRequest<T>(endpoint, {
     method: "PUT",
-    body: JSON.stringify(data),
+    headers: { "Content-Type": "application/json" },
+    body: data ? JSON.stringify(data) : JSON.stringify({}),
   });
+}
+
+export async function authenticatedDelete<T>(endpoint: string): Promise<T> {
+  const token = await getAuthToken();
+  if (!token) {
+    throw new Error("No authentication token found");
+  }
+
+  const url = `${API_URL}${endpoint}`;
+  console.log(`API Request: DELETE ${url}`);
+
+  try {
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    console.log(`API Response: ${response.status} ${response.statusText}`);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error: any) {
+    console.error(`API Error for ${endpoint}:`, error.message);
+    throw error;
+  }
+}
+
+// Player API endpoints
+export const playerAPI = {
+  // Profile & Clubs
+  getProfile: () => authenticatedGet<{
+    id: string;
+    name: string;
+    email: string;
+    image?: string;
+    clubs: Array<{ id: string; name: string; role: string }>;
+  }>("/api/user/profile"),
+
+  getClubs: () => authenticatedGet<Array<{
+    id: string;
+    name: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    role: string;
+  }>>("/api/user/clubs"),
+
+  joinClub: (clubId: string) => authenticatedPost<{ success: boolean; membership: any }>(`/api/user/clubs/${clubId}/join`),
+
+  // Bookings
+  getBookings: () => authenticatedGet<Array<{
+    id: string;
+    clubName: string;
+    courtName: string;
+    bookingDate: string;
+    startTime: string;
+    endTime: string;
+    status: string;
+    qrCode: string;
+    createdAt: string;
+  }>>("/api/bookings"),
+
+  createBooking: (data: {
+    clubId: string;
+    courtId: string;
+    bookingDate: string;
+    startTime: string;
+    endTime: string;
+  }) => authenticatedPost<any>("/api/bookings", data),
+
+  cancelBooking: (bookingId: string) => authenticatedDelete<{ success: boolean }>(`/api/bookings/${bookingId}`),
+
+  // Tournaments
+  getTournaments: () => authenticatedGet<Array<{
+    id: string;
+    name: string;
+    clubName: string;
+    type: string;
+    startDate: string;
+    status: string;
+    participants: number;
+    maxParticipants: number;
+  }>>("/api/tournaments"),
+
+  joinTournament: (tournamentId: string) => authenticatedPost<{ success: boolean; request: any }>(`/api/tournaments/${tournamentId}/join`),
+
+  getTournamentDetails: (tournamentId: string) => authenticatedGet<any>(`/api/tournaments/${tournamentId}`),
+
+  // Rankings & Stats
+  getRankings: (clubId: string) => authenticatedGet<Array<{
+    rank: number;
+    userId: string;
+    userName: string;
+    points: number;
+    eloRating: number;
+    wins: number;
+    losses: number;
+    matchesPlayed: number;
+  }>>(`/api/rankings/${clubId}`),
+
+  getUserStats: (clubId: string) => authenticatedGet<{
+    points: number;
+    eloRating: number;
+    wins: number;
+    losses: number;
+    matchesPlayed: number;
+    setsWon: number;
+    setsLost: number;
+    recentMatches: Array<{ opponent: string; result: string; date: string }>;
+  }>(`/api/user/stats/${clubId}`),
+
+  // Notifications
+  getNotifications: () => authenticatedGet<Array<{
+    id: string;
+    type: string;
+    title: string;
+    body: string;
+    isRead: boolean;
+    createdAt: string;
+  }>>("/api/notifications"),
+
+  markNotificationRead: (notificationId: string) => authenticatedPut<{ success: boolean }>(`/api/notifications/${notificationId}/read`),
 };
 
-/**
- * Authenticated PATCH request
- */
-export const authenticatedPatch = async <T = any>(
-  endpoint: string,
-  data: any
-): Promise<T> => {
-  return authenticatedApiCall<T>(endpoint, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-};
+// Club Admin API endpoints
+export const clubAPI = {
+  // Dashboard
+  getDashboard: () => authenticatedGet<{
+    todayBookings: number;
+    activeMembers: number;
+    activeTournaments: number;
+    revenue: number;
+    recentActivity: Array<{ type: string; description: string; timestamp: string }>;
+  }>("/api/club/dashboard"),
 
-/**
- * Authenticated DELETE request
- * Always sends a body to avoid FST_ERR_CTP_EMPTY_JSON_BODY errors
- */
-export const authenticatedDelete = async <T = any>(endpoint: string, data: any = {}): Promise<T> => {
-  return authenticatedApiCall<T>(endpoint, {
-    method: "DELETE",
-    body: JSON.stringify(data),
-  });
+  // Courts
+  getCourts: () => authenticatedGet<Array<{
+    id: string;
+    name: string;
+    isActive: boolean;
+    schedules: Array<{
+      dayOfWeek: number;
+      openTime: string;
+      closeTime: string;
+      slotDurationMinutes: number;
+    }>;
+  }>>("/api/club/courts"),
+
+  createCourt: (data: {
+    name: string;
+    isActive: boolean;
+    schedules: Array<{
+      dayOfWeek: number;
+      openTime: string;
+      closeTime: string;
+      slotDurationMinutes: number;
+    }>;
+  }) => authenticatedPost<any>("/api/club/courts", data),
+
+  updateCourt: (courtId: string, data: any) => authenticatedPut<any>(`/api/club/courts/${courtId}`, data),
+
+  deleteCourt: (courtId: string) => authenticatedDelete<{ success: boolean }>(`/api/club/courts/${courtId}`),
+
+  // Bookings
+  getBookings: () => authenticatedGet<Array<{
+    id: string;
+    userName: string;
+    courtName: string;
+    bookingDate: string;
+    startTime: string;
+    endTime: string;
+    status: string;
+    qrCode: string;
+  }>>("/api/club/bookings"),
+
+  updateBookingStatus: (bookingId: string, status: string) => authenticatedPut<any>(`/api/club/bookings/${bookingId}/status`, { status }),
+
+  // Tournaments
+  getTournaments: () => authenticatedGet<Array<{
+    id: string;
+    name: string;
+    type: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+    maxParticipants: number;
+    currentParticipants: number;
+  }>>("/api/club/tournaments"),
+
+  createTournament: (data: {
+    name: string;
+    type: string;
+    startDate: string;
+    endDate: string;
+    maxParticipants: number;
+  }) => authenticatedPost<any>("/api/club/tournaments", data),
+
+  updateTournament: (tournamentId: string, data: any) => authenticatedPut<any>(`/api/club/tournaments/${tournamentId}`, data),
+
+  getTournamentRequests: (tournamentId: string) => authenticatedGet<Array<{
+    id: string;
+    userId: string;
+    userName: string;
+    status: string;
+    createdAt: string;
+  }>>(`/api/club/tournaments/${tournamentId}/requests`),
+
+  updateTournamentRequest: (tournamentId: string, requestId: string, status: string) => 
+    authenticatedPut<any>(`/api/club/tournaments/${tournamentId}/requests/${requestId}`, { status }),
+
+  // Players
+  getPlayers: () => authenticatedGet<Array<{
+    id: string;
+    userId: string;
+    userName: string;
+    email: string;
+    role: string;
+    joinedAt: string;
+    stats: { wins: number; losses: number; matchesPlayed: number };
+  }>>("/api/club/players"),
+
+  updatePlayerRole: (userId: string, role: string) => authenticatedPut<any>(`/api/club/players/${userId}/role`, { role }),
+
+  removePlayer: (userId: string) => authenticatedDelete<{ success: boolean }>(`/api/club/players/${userId}`),
+
+  // Staff
+  getStaff: () => authenticatedGet<Array<{
+    id: string;
+    userId: string;
+    userName: string;
+    email: string;
+    role: string;
+    joinedAt: string;
+  }>>("/api/club/staff"),
+
+  addStaff: (data: { userId: string; role: string }) => authenticatedPost<any>("/api/club/staff", data),
+
+  // QR Validation
+  validateQR: (qrCode: string) => authenticatedPost<{
+    success: boolean;
+    booking: { id: string; userName: string; courtName: string; startTime: string };
+  }>("/api/qr/validate", { qrCode }),
 };
