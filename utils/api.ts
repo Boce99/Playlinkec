@@ -179,6 +179,18 @@ export const playerAPI = {
     createdAt: string;
   }>>("/api/bookings"),
 
+  getBookingDetails: (bookingId: string) => authenticatedGet<{
+    id: string;
+    clubName: string;
+    courtName: string;
+    bookingDate: string;
+    startTime: string;
+    endTime: string;
+    status: string;
+    qrCode: string;
+    createdAt: string;
+  }>(`/api/bookings/${bookingId}`),
+
   createBooking: (data: {
     clubId: string;
     courtId: string;
@@ -316,7 +328,8 @@ export const clubAPI = {
     startDate: string;
     endDate: string;
     maxParticipants: number;
-    currentParticipants: number;
+    participantCount: number;
+    createdAt: string;
   }>>("/api/club/tournaments"),
 
   createTournament: (data: {
@@ -329,10 +342,13 @@ export const clubAPI = {
 
   updateTournament: (tournamentId: string, data: any) => authenticatedPut<any>(`/api/club/tournaments/${tournamentId}`, data),
 
+  deleteTournament: (tournamentId: string) => authenticatedDelete<{ success: boolean }>(`/api/club/tournaments/${tournamentId}`),
+
   getTournamentRequests: (tournamentId: string) => authenticatedGet<Array<{
     id: string;
     userId: string;
     userName: string;
+    userEmail: string;
     status: string;
     createdAt: string;
   }>>(`/api/club/tournaments/${tournamentId}/requests`),
@@ -341,21 +357,68 @@ export const clubAPI = {
     authenticatedPut<any>(`/api/club/tournaments/${tournamentId}/requests/${requestId}`, { status }),
 
   closeRegistration: (tournamentId: string) =>
-    authenticatedPost<{ success: boolean; matchesCreated: number; bracket: any[] }>(
-      `/api/club/tournaments/${tournamentId}/close-registration`,
-      {}
-    ),
+    authenticatedPost<{
+      success: boolean;
+      matchesCreated: number;
+      bracket: Array<{
+        matchId: string;
+        round: number;
+        teamA: Array<{ userId: string; userName: string }>;
+        teamB: Array<{ userId: string; userName: string }>;
+      }>;
+    }>(`/api/club/tournaments/${tournamentId}/close-registration`, {}),
+
+  // Matches
+  getMatches: () => authenticatedGet<Array<{
+    id: string;
+    tournamentId?: string;
+    tournamentName?: string;
+    round?: number;
+    status: string;
+    teamA: Array<{ userId: string; userName: string }>;
+    teamB: Array<{ userId: string; userName: string }>;
+    results: Array<{ setNumber: number; teamAScore: number; teamBScore: number }>;
+    createdAt: string;
+  }>>("/api/club/matches"),
+
+  recordMatchResult: (matchId: string, results: Array<{ setNumber: number; teamAScore: number; teamBScore: number }>) =>
+    authenticatedPost<any>(`/api/club/matches/${matchId}/result`, { results }),
+
+  // Rankings
+  getRankings: () => authenticatedGet<Array<{
+    rank: number;
+    userId: string;
+    userName: string;
+    points: number;
+    eloRating: number;
+    wins: number;
+    losses: number;
+    matchesPlayed: number;
+  }>>("/api/club/rankings"),
+
+  getPlayerStats: (userId: string) => authenticatedGet<{
+    points: number;
+    eloRating: number;
+    wins: number;
+    losses: number;
+    matchesPlayed: number;
+    setsWon: number;
+    setsLost: number;
+    recentMatches: Array<{ opponent: string; result: string; date: string }>;
+  }>(`/api/club/players/${userId}/stats`),
 
   // Players
   getPlayers: () => authenticatedGet<Array<{
     id: string;
     userId: string;
     userName: string;
-    email: string;
+    userEmail: string;
     role: string;
     joinedAt: string;
-    stats: { wins: number; losses: number; matchesPlayed: number };
+    stats: { points: number; eloRating: number; wins: number; losses: number; matchesPlayed: number };
   }>>("/api/club/players"),
+
+  addPlayer: (data: { userEmail: string; role: string }) => authenticatedPost<any>("/api/club/players", data),
 
   updatePlayerRole: (userId: string, role: string) => authenticatedPut<any>(`/api/club/players/${userId}/role`, { role }),
 
@@ -366,12 +429,14 @@ export const clubAPI = {
     id: string;
     userId: string;
     userName: string;
-    email: string;
+    userEmail: string;
     role: string;
     joinedAt: string;
   }>>("/api/club/staff"),
 
-  addStaff: (data: { userId: string; role: string }) => authenticatedPost<any>("/api/club/staff", data),
+  addStaff: (data: { userEmail: string; role: string }) => authenticatedPost<any>("/api/club/staff", data),
+
+  removeStaff: (userId: string) => authenticatedDelete<{ success: boolean }>(`/api/club/staff/${userId}`),
 
   // QR Validation
   validateQR: (qrCode: string) => authenticatedPost<{

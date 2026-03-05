@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
+import { clubAPI } from '@/utils/api';
 import {
   View,
   Text,
@@ -37,6 +38,17 @@ interface TournamentRequest {
   userEmail: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
+}
+
+interface BracketGenerationResult {
+  success: boolean;
+  matchesCreated: number;
+  bracket: Array<{
+    matchId: string;
+    round: number;
+    teamA: Array<{ userId: string; userName: string }>;
+    teamB: Array<{ userId: string; userName: string }>;
+  }>;
 }
 
 const styles = StyleSheet.create({
@@ -237,6 +249,19 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 6,
   },
+  successMessage: {
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  successText: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
 });
 
 export default function ClubTournamentsScreen() {
@@ -245,9 +270,12 @@ export default function ClubTournamentsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRequestsModal, setShowRequestsModal] = useState(false);
+  const [showConfirmCloseModal, setShowConfirmCloseModal] = useState(false);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [requests, setRequests] = useState<TournamentRequest[]>([]);
   const [showTypePicker, setShowTypePicker] = useState(false);
+  const [bracketResult, setBracketResult] = useState<BracketGenerationResult | null>(null);
+  const [showBracketSuccess, setShowBracketSuccess] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -269,39 +297,12 @@ export default function ClubTournamentsScreen() {
 
   const loadTournaments = useCallback(async () => {
     try {
-      console.log('Loading club tournaments...');
-      // TODO: Backend Integration - GET /api/club/tournaments
-      // Returns: [{ id, name, type, status, startDate, endDate, maxParticipants, participantCount, createdAt }]
-      
-      // Mock data for now
-      const mockTournaments: Tournament[] = [
-        {
-          id: '1',
-          name: 'Torneo de Verano 2024',
-          type: 'Traditional',
-          status: 'open',
-          startDate: '2024-02-01',
-          endDate: '2024-02-15',
-          maxParticipants: 16,
-          participantCount: 8,
-          createdAt: '2024-01-15T10:00:00Z',
-        },
-        {
-          id: '2',
-          name: 'Super 8 Mensual',
-          type: 'Super 8',
-          status: 'in_progress',
-          startDate: '2024-01-20',
-          endDate: '2024-01-27',
-          maxParticipants: 8,
-          participantCount: 8,
-          createdAt: '2024-01-10T10:00:00Z',
-        },
-      ];
-      
-      setTournaments(mockTournaments);
-    } catch (error) {
-      console.error('Error loading tournaments:', error);
+      console.log('ClubTournamentsScreen: Loading tournaments...');
+      const data = await clubAPI.getTournaments();
+      console.log('ClubTournamentsScreen: Loaded tournaments:', data.length);
+      setTournaments(data);
+    } catch (error: any) {
+      console.error('ClubTournamentsScreen: Error loading tournaments:', error.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -319,10 +320,19 @@ export default function ClubTournamentsScreen() {
 
   const handleAddTournament = async () => {
     try {
-      console.log('Creating tournament:', formData);
-      // TODO: Backend Integration - POST /api/club/tournaments
-      // Body: { name, type, startDate?, endDate?, maxParticipants? }
+      console.log('ClubTournamentsScreen: Creating tournament:', formData);
       
+      const maxParticipantsNum = parseInt(formData.maxParticipants) || 16;
+      
+      await clubAPI.createTournament({
+        name: formData.name,
+        type: formData.type,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        maxParticipants: maxParticipantsNum,
+      });
+      
+      console.log('ClubTournamentsScreen: Tournament created successfully');
       setShowAddModal(false);
       setFormData({
         name: '',
@@ -332,90 +342,91 @@ export default function ClubTournamentsScreen() {
         maxParticipants: '',
       });
       loadTournaments();
-    } catch (error) {
-      console.error('Error creating tournament:', error);
+    } catch (error: any) {
+      console.error('ClubTournamentsScreen: Error creating tournament:', error.message);
     }
   };
 
   const handleDeleteTournament = async (tournamentId: string) => {
     try {
-      console.log('Deleting tournament:', tournamentId);
-      // TODO: Backend Integration - DELETE /api/club/tournaments/:id
+      console.log('ClubTournamentsScreen: Deleting tournament:', tournamentId);
+      await clubAPI.deleteTournament(tournamentId);
+      console.log('ClubTournamentsScreen: Tournament deleted successfully');
       loadTournaments();
-    } catch (error) {
-      console.error('Error deleting tournament:', error);
+    } catch (error: any) {
+      console.error('ClubTournamentsScreen: Error deleting tournament:', error.message);
     }
   };
 
-  const handleCloseRegistration = async (tournamentId: string) => {
+  const handleCloseRegistration = async () => {
+    if (!selectedTournament) return;
+    
     try {
-      console.log('ClubTournamentsScreen: Closing registration for tournament:', tournamentId);
+      console.log('ClubTournamentsScreen: Closing registration for tournament:', selectedTournament.id);
       setLoading(true);
-      // TODO: Backend Integration - POST /api/club/tournaments/:tournamentId/close-registration
-      // Changes tournament status to 'in_progress' and generates bracket/matches
-      // Returns: { success: true, matchesCreated: number, bracket: [...] }
+      setShowConfirmCloseModal(false);
+      
+      const result = await clubAPI.closeRegistration(selectedTournament.id);
+      
+      console.log('ClubTournamentsScreen: Registration closed successfully. Matches created:', result.matchesCreated);
+      setBracketResult(result);
+      setShowBracketSuccess(true);
+      
+      setTimeout(() => {
+        setShowBracketSuccess(false);
+        setBracketResult(null);
+      }, 5000);
+      
       await loadTournaments();
+      
+      router.push('/(club)/matches');
     } catch (error: any) {
       console.error('ClubTournamentsScreen: Error closing registration:', error.message);
     } finally {
       setLoading(false);
+      setSelectedTournament(null);
     }
   };
 
   const handleViewRequests = async (tournament: Tournament) => {
     try {
-      console.log('Loading requests for tournament:', tournament.id);
+      console.log('ClubTournamentsScreen: Loading requests for tournament:', tournament.id);
       setSelectedTournament(tournament);
-      // TODO: Backend Integration - GET /api/club/tournaments/:id/requests
-      // Returns: [{ id, userId, userName, userEmail, status, createdAt }]
       
-      const mockRequests: TournamentRequest[] = [
-        {
-          id: '1',
-          userId: 'user1',
-          userName: 'Juan Pérez',
-          userEmail: 'juan@example.com',
-          status: 'pending',
-          createdAt: '2024-01-16T10:00:00Z',
-        },
-        {
-          id: '2',
-          userId: 'user2',
-          userName: 'María García',
-          userEmail: 'maria@example.com',
-          status: 'pending',
-          createdAt: '2024-01-16T11:00:00Z',
-        },
-      ];
-      
-      setRequests(mockRequests);
+      const data = await clubAPI.getTournamentRequests(tournament.id);
+      console.log('ClubTournamentsScreen: Loaded requests:', data.length);
+      setRequests(data);
       setShowRequestsModal(true);
-    } catch (error) {
-      console.error('Error loading requests:', error);
+    } catch (error: any) {
+      console.error('ClubTournamentsScreen: Error loading requests:', error.message);
     }
   };
 
   const handleApproveRequest = async (requestId: string) => {
+    if (!selectedTournament) return;
+    
     try {
-      console.log('Approving request:', requestId);
-      // TODO: Backend Integration - PUT /api/club/tournaments/:tournamentId/requests/:requestId
-      // Body: { status: 'approved' }
+      console.log('ClubTournamentsScreen: Approving request:', requestId);
+      await clubAPI.updateTournamentRequest(selectedTournament.id, requestId, 'approved');
+      console.log('ClubTournamentsScreen: Request approved successfully');
       
       setRequests(prev => prev.filter(r => r.id !== requestId));
-    } catch (error) {
-      console.error('Error approving request:', error);
+    } catch (error: any) {
+      console.error('ClubTournamentsScreen: Error approving request:', error.message);
     }
   };
 
   const handleRejectRequest = async (requestId: string) => {
+    if (!selectedTournament) return;
+    
     try {
-      console.log('Rejecting request:', requestId);
-      // TODO: Backend Integration - PUT /api/club/tournaments/:tournamentId/requests/:requestId
-      // Body: { status: 'rejected' }
+      console.log('ClubTournamentsScreen: Rejecting request:', requestId);
+      await clubAPI.updateTournamentRequest(selectedTournament.id, requestId, 'rejected');
+      console.log('ClubTournamentsScreen: Request rejected successfully');
       
       setRequests(prev => prev.filter(r => r.id !== requestId));
-    } catch (error) {
-      console.error('Error rejecting request:', error);
+    } catch (error: any) {
+      console.error('ClubTournamentsScreen: Error rejecting request:', error.message);
     }
   };
 
@@ -454,7 +465,7 @@ export default function ClubTournamentsScreen() {
     return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  if (loading) {
+  if (loading && !showBracketSuccess) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
         <Stack.Screen options={{ headerShown: true, title: 'Torneos' }} />
@@ -476,6 +487,20 @@ export default function ClubTournamentsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
+        {showBracketSuccess && bracketResult && (
+          <View style={[styles.successMessage, { backgroundColor: colors.success + '20' }]}>
+            <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check-circle" size={24} color={colors.success} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.successText, { color: colors.success }]}>
+                ¡Bracket generado exitosamente!
+              </Text>
+              <Text style={[styles.detailText, { color: colors.success }]}>
+                {bracketResult.matchesCreated} partidos creados
+              </Text>
+            </View>
+          </View>
+        )}
+
         <TouchableOpacity
           style={[styles.addButton, { backgroundColor: colors.primary }]}
           onPress={() => setShowAddModal(true)}
@@ -536,7 +561,10 @@ export default function ClubTournamentsScreen() {
                   {tournament.status === 'open' && (
                     <TouchableOpacity
                       style={[styles.actionButton, { backgroundColor: colors.warning + '20' }]}
-                      onPress={() => handleCloseRegistration(tournament.id)}
+                      onPress={() => {
+                        setSelectedTournament(tournament);
+                        setShowConfirmCloseModal(true);
+                      }}
                     >
                       <IconSymbol ios_icon_name="lock" android_material_icon_name="lock" size={16} color={colors.warning} />
                       <Text style={[styles.actionButtonText, { color: colors.warning }]}>Cerrar</Text>
@@ -701,6 +729,41 @@ export default function ClubTournamentsScreen() {
             >
               <Text style={[styles.modalButtonText, { color: '#fff' }]}>Cerrar</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Confirm Close Registration Modal */}
+      <Modal visible={showConfirmCloseModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: cardBg }]}>
+            <Text style={[styles.modalTitle, { color: textColor }]}>Cerrar Inscripción</Text>
+            
+            <Text style={[styles.detailText, { color: textColor, marginBottom: 20 }]}>
+              ¿Estás seguro de que deseas cerrar la inscripción para "{selectedTournament?.name}"?
+            </Text>
+            
+            <Text style={[styles.detailText, { color: mutedColor, marginBottom: 20 }]}>
+              Esto generará automáticamente el bracket y los partidos según el tipo de torneo ({selectedTournament ? getTournamentTypeText(selectedTournament.type) : ''}).
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: borderColor }]}
+                onPress={() => {
+                  setShowConfirmCloseModal(false);
+                  setSelectedTournament(null);
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: textColor }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: colors.warning }]}
+                onPress={handleCloseRegistration}
+              >
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Cerrar y Generar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
