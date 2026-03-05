@@ -15,21 +15,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { clubAPI } from '@/utils/api';
+import { useClub } from '@/contexts/ClubContext';
 
 interface BookingDetails {
   id: string;
   userName: string;
   courtName: string;
-  bookingDate: string;
   startTime: string;
   endTime: string;
-  status: string;
 }
 
 export default function QRScannerScreen() {
   const colorScheme = useColorScheme();
   const theme = colors[colorScheme ?? 'light'];
   const router = useRouter();
+  const { selectedClub } = useClub();
 
   const [scanning, setScanning] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -39,14 +39,18 @@ export default function QRScannerScreen() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const handleScanQR = async (qrCode: string) => {
+    if (!selectedClub) {
+      console.error('QRScannerScreen: No club selected');
+      setValidationSuccess(false);
+      setErrorMessage('No hay club seleccionado');
+      setShowResultModal(true);
+      return;
+    }
+
     console.log('QRScannerScreen: Validating QR code:', qrCode);
     try {
       setValidating(true);
-      // TODO: Backend Integration - POST /api/qr/validate
-      // Body: { qrCode: string }
-      // Returns: { success: true, booking: { id, userName, courtName, bookingDate, startTime, endTime, status } }
-      // Or: { success: false, error: string }
-      const result = await clubAPI.validateQR(qrCode);
+      const result = await clubAPI.validateQR(selectedClub.id, qrCode);
 
       if (result.success && result.booking) {
         console.log('QRScannerScreen: QR validation successful');
@@ -70,7 +74,6 @@ export default function QRScannerScreen() {
   };
 
   const handleManualInput = () => {
-    // For development/testing - simulate a QR scan
     const mockQRCode = 'BOOKING-123-1234567890-abc123';
     handleScanQR(mockQRCode);
   };
@@ -80,6 +83,28 @@ export default function QRScannerScreen() {
     setBookingDetails(null);
     setErrorMessage('');
   };
+
+  if (!selectedClub) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
+        <Stack.Screen options={{ title: 'Escanear QR', headerShown: true }} />
+        <View style={styles.errorContainer}>
+          <IconSymbol
+            ios_icon_name="exclamationmark.triangle"
+            android_material_icon_name="warning"
+            size={64}
+            color={theme.error}
+          />
+          <Text style={[styles.errorTitle, { color: theme.text }]}>
+            No hay club seleccionado
+          </Text>
+          <Text style={[styles.errorSubtext, { color: theme.textSecondary }]}>
+            Por favor selecciona un club desde el panel de administración
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['bottom']}>
@@ -146,7 +171,6 @@ export default function QRScannerScreen() {
         </View>
       </View>
 
-      {/* Result Modal */}
       <Modal visible={showResultModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
@@ -221,6 +245,23 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 20,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 14,
+    textAlign: 'center',
   },
   scannerContainer: {
     width: '100%',

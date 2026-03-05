@@ -5,6 +5,7 @@ import React, { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { WidgetProvider } from "@/contexts/WidgetContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ClubProvider } from "@/contexts/ClubContext";
 import * as SplashScreen from "expo-splash-screen";
 import { useNetworkState } from "expo-network";
 import {
@@ -64,8 +65,6 @@ function RootLayoutNav() {
       router.replace('/auth');
     } else if (user && inAuthGroup) {
       console.log('User logged in, redirecting to home');
-      // TODO: Backend Integration - GET /api/user/profile to fetch user role
-      // For now, default to player tabs
       router.replace('/(tabs)/(home)');
     }
   }, [user, loading, segments]);
@@ -113,11 +112,13 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === "dark" ? PlayLinkDarkTheme : PlayLinkLightTheme}>
         <AuthProvider>
-          <WidgetProvider>
-            <SystemBars style={colorScheme === "dark" ? "light" : "dark"} />
-            <RootLayoutNav />
-            <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-          </WidgetProvider>
+          <ClubProvider>
+            <WidgetProvider>
+              <SystemBars style={colorScheme === "dark" ? "light" : "dark"} />
+              <RootLayoutNav />
+              <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+            </WidgetProvider>
+          </ClubProvider>
         </AuthProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
