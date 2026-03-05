@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import {
   View,
@@ -15,6 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 
 type Mode = "signin" | "signup";
+type UserType = "player" | "club";
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -22,6 +24,7 @@ export default function AuthScreen() {
     useAuth();
 
   const [mode, setMode] = useState<Mode>("signin");
+  const [userType, setUserType] = useState<UserType>("player");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -30,14 +33,14 @@ export default function AuthScreen() {
   if (authLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color="#4CAF50" />
       </View>
     );
   }
 
   const handleEmailAuth = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Please enter email and password");
+      Alert.alert("Error", "Por favor ingresa email y contraseña");
       return;
     }
 
@@ -45,17 +48,28 @@ export default function AuthScreen() {
     try {
       if (mode === "signin") {
         await signInWithEmail(email, password);
-        router.replace("/");
+        // TODO: Backend Integration - GET /api/user/profile to fetch user role
+        // For now, redirect based on selected userType
+        if (userType === "club") {
+          router.replace("/(club)");
+        } else {
+          router.replace("/(tabs)/(home)");
+        }
       } else {
         await signUpWithEmail(email, password, name);
+        // TODO: Backend Integration - POST /api/auth/register with { email, password, name, role: userType }
         Alert.alert(
-          "Success",
-          "Account created! Please check your email to verify your account."
+          "Éxito",
+          "¡Cuenta creada! Por favor verifica tu email."
         );
-        router.replace("/");
+        if (userType === "club") {
+          router.replace("/(club)");
+        } else {
+          router.replace("/(tabs)/(home)");
+        }
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Authentication failed");
+      Alert.alert("Error", error.message || "Autenticación fallida");
     } finally {
       setLoading(false);
     }
@@ -71,9 +85,15 @@ export default function AuthScreen() {
       } else if (provider === "github") {
         await signInWithGitHub();
       }
-      router.replace("/");
+      // TODO: Backend Integration - GET /api/user/profile to fetch user role
+      // For now, redirect based on selected userType
+      if (userType === "club") {
+        router.replace("/(club)");
+      } else {
+        router.replace("/(tabs)/(home)");
+      }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Authentication failed");
+      Alert.alert("Error", error.message || "Autenticación fallida");
     } finally {
       setLoading(false);
     }
@@ -86,14 +106,52 @@ export default function AuthScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
+          <Text style={styles.logo}>PlayLink Ec</Text>
+          <Text style={styles.subtitle}>Gestión de Clubes de Pádel</Text>
+
+          <View style={styles.userTypeContainer}>
+            <TouchableOpacity
+              style={[
+                styles.userTypeButton,
+                userType === "player" && styles.userTypeButtonActive,
+              ]}
+              onPress={() => setUserType("player")}
+            >
+              <Text
+                style={[
+                  styles.userTypeText,
+                  userType === "player" && styles.userTypeTextActive,
+                ]}
+              >
+                Jugador
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.userTypeButton,
+                userType === "club" && styles.userTypeButtonActive,
+              ]}
+              onPress={() => setUserType("club")}
+            >
+              <Text
+                style={[
+                  styles.userTypeText,
+                  userType === "club" && styles.userTypeTextActive,
+                ]}
+              >
+                Club
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <Text style={styles.title}>
-            {mode === "signin" ? "Sign In" : "Sign Up"}
+            {mode === "signin" ? "Iniciar Sesión" : "Registrarse"}
           </Text>
 
           {mode === "signup" && (
             <TextInput
               style={styles.input}
-              placeholder="Name (optional)"
+              placeholder="Nombre (opcional)"
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
@@ -112,7 +170,7 @@ export default function AuthScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Password"
+            placeholder="Contraseña"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -128,7 +186,7 @@ export default function AuthScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.primaryButtonText}>
-                {mode === "signin" ? "Sign In" : "Sign Up"}
+                {mode === "signin" ? "Iniciar Sesión" : "Registrarse"}
               </Text>
             )}
           </TouchableOpacity>
@@ -139,14 +197,14 @@ export default function AuthScreen() {
           >
             <Text style={styles.switchModeText}>
               {mode === "signin"
-                ? "Don't have an account? Sign Up"
-                : "Already have an account? Sign In"}
+                ? "¿No tienes cuenta? Regístrate"
+                : "¿Ya tienes cuenta? Inicia Sesión"}
             </Text>
           </TouchableOpacity>
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or continue with</Text>
+            <Text style={styles.dividerText}>o continuar con</Text>
             <View style={styles.dividerLine} />
           </View>
 
@@ -155,7 +213,7 @@ export default function AuthScreen() {
             onPress={() => handleSocialAuth("google")}
             disabled={loading}
           >
-            <Text style={styles.socialButtonText}>Continue with Google</Text>
+            <Text style={styles.socialButtonText}>Continuar con Google</Text>
           </TouchableOpacity>
 
           {Platform.OS === "ios" && (
@@ -165,7 +223,7 @@ export default function AuthScreen() {
               disabled={loading}
             >
               <Text style={[styles.socialButtonText, styles.appleButtonText]}>
-                Continue with Apple
+                Continuar con Apple
               </Text>
             </TouchableOpacity>
           )}
@@ -194,10 +252,48 @@ const styles = StyleSheet.create({
     padding: 24,
     justifyContent: "center",
   },
-  title: {
-    fontSize: 32,
+  logo: {
+    fontSize: 36,
     fontWeight: "bold",
+    marginBottom: 8,
+    textAlign: "center",
+    color: "#4CAF50",
+  },
+  subtitle: {
+    fontSize: 16,
     marginBottom: 32,
+    textAlign: "center",
+    color: "#666",
+  },
+  userTypeContainer: {
+    flexDirection: "row",
+    marginBottom: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    overflow: "hidden",
+  },
+  userTypeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+  userTypeButtonActive: {
+    backgroundColor: "#4CAF50",
+  },
+  userTypeText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#666",
+  },
+  userTypeTextActive: {
+    color: "#fff",
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 24,
     textAlign: "center",
     color: "#000",
   },
@@ -213,7 +309,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     height: 50,
-    backgroundColor: "#007AFF",
+    backgroundColor: "#4CAF50",
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
@@ -232,7 +328,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   switchModeText: {
-    color: "#007AFF",
+    color: "#4CAF50",
     fontSize: 14,
   },
   divider: {

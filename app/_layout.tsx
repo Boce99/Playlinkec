@@ -19,10 +19,8 @@ import { useFonts } from "expo-font";
 import { SystemBars } from "react-native-edge-to-edge";
 import { colors } from "@/styles/commonStyles";
 
-// Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
-// Custom theme with PlayLink colors
 const PlayLinkLightTheme: Theme = {
   ...DefaultTheme,
   colors: {
@@ -56,16 +54,18 @@ function RootLayoutNav() {
     if (loading) return;
 
     const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-popup' || segments[0] === 'auth-callback';
+    const inClubGroup = segments[0] === '(club)';
+    const inTabsGroup = segments[0] === '(tabs)';
 
     console.log('Auth state changed - User:', user ? 'logged in' : 'not logged in', 'Segments:', segments);
 
     if (!user && !inAuthGroup) {
-      // User is not signed in and not on auth screen, redirect to auth
       console.log('Redirecting to auth screen');
       router.replace('/auth');
     } else if (user && inAuthGroup) {
-      // User is signed in but on auth screen, redirect to home
-      console.log('Redirecting to home screen');
+      console.log('User logged in, redirecting to home');
+      // TODO: Backend Integration - GET /api/user/profile to fetch user role
+      // For now, default to player tabs
       router.replace('/(tabs)/(home)');
     }
   }, [user, loading, segments]);
@@ -73,9 +73,11 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="(club)" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="auth-popup" options={{ presentation: "modal" }} />
       <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
+      <Stack.Screen name="notifications" options={{ presentation: "modal", title: "Notificaciones" }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
@@ -97,8 +99,8 @@ export default function RootLayout() {
   useEffect(() => {
     if (isConnected === false) {
       Alert.alert(
-        "No Internet Connection",
-        "Please check your internet connection and try again."
+        "Sin Conexión a Internet",
+        "Por favor verifica tu conexión a internet e intenta nuevamente."
       );
     }
   }, [isConnected]);
