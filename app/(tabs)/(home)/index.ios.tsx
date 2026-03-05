@@ -1,21 +1,20 @@
 
-import { Stack, useRouter } from "expo-router";
-import { useTheme } from "@react-navigation/native";
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  StyleSheet,
   View,
   Text,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
+  StyleSheet,
   useColorScheme,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { IconSymbol } from "@/components/IconSymbol";
-import { colors } from "@/styles/commonStyles";
-import { useAuth } from "@/contexts/AuthContext";
+  RefreshControl,
+  ActivityIndicator,
+} from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '@/contexts/AuthContext';
+import { IconSymbol } from '@/components/IconSymbol';
+import { colors } from '@/styles/commonStyles';
 
 interface Booking {
   id: string;
@@ -32,144 +31,181 @@ interface Club {
   id: string;
   name: string;
   address: string;
+  city: string;
+}
+
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  createdAt: string;
 }
 
 export default function HomeScreen() {
-  const { colors: themeColors } = useTheme();
   const colorScheme = useColorScheme();
-  const appColors = colorScheme === 'dark' ? colors.dark : colors.light;
+  const theme = colors[colorScheme ?? 'light'];
   const router = useRouter();
   const { user } = useAuth();
-
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [clubs, setClubs] = useState<Club[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [upcomingBookings, setUpcomingBookings] = useState<Booking[]>([]);
+  const [myClubs, setMyClubs] = useState<Club[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  useEffect(() => {
-    console.log('HomeScreen mounted, user:', user?.name || user?.email);
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    console.log('HomeScreen: Loading data for user', user?.email);
     try {
-      console.log('Loading bookings and clubs data');
-      // TODO: Backend Integration - GET /api/bookings to fetch user's bookings
-      // TODO: Backend Integration - GET /api/clubs to fetch available clubs
+      // TODO: Backend Integration - GET /api/bookings to fetch upcoming bookings
+      // TODO: Backend Integration - GET /api/clubs/my-clubs to fetch user's clubs
+      // TODO: Backend Integration - GET /api/notifications to fetch notifications
       
       // Mock data for now
-      setBookings([]);
-      setClubs([]);
+      setUpcomingBookings([
+        {
+          id: '1',
+          clubName: 'Club Padel Central',
+          courtName: 'Cancha 1',
+          bookingDate: '2024-01-20',
+          startTime: '18:00',
+          endTime: '19:30',
+          status: 'confirmed',
+          qrCode: 'QR123456',
+        },
+      ]);
+      
+      setMyClubs([
+        {
+          id: '1',
+          name: 'Club Padel Central',
+          address: 'Av. Principal 123',
+          city: 'Quito',
+        },
+      ]);
+      
+      setNotifications([
+        {
+          id: '1',
+          title: 'Reserva confirmada',
+          message: 'Tu reserva para mañana a las 18:00 está confirmada',
+          type: 'booking_created',
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('HomeScreen: Error loading data:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [user]);
 
-  const onRefresh = () => {
-    console.log('User pulled to refresh');
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const onRefresh = useCallback(() => {
+    console.log('HomeScreen: Refreshing data');
     setRefreshing(true);
     loadData();
-  };
+  }, [loadData]);
+
+  const userName = user?.name || 'Jugador';
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
-        <Stack.Screen
-          options={{
-            headerShown: false,
-          }}
-        />
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={appColors.primary} />
-        </View>
-      </SafeAreaView>
+      <View style={[styles.container, { backgroundColor: theme.background }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <ActivityIndicator size="large" color={theme.primary} />
+      </View>
     );
   }
 
-  const upcomingBookings = bookings.filter(b => b.status === 'confirmed');
-  const hasUpcomingBookings = upcomingBookings.length > 0;
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <Stack.Screen options={{ headerShown: false }} />
       
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={appColors.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
         }
       >
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={[styles.greeting, { color: appColors.textSecondary }]}>
-              Hola
-            </Text>
-            <Text style={[styles.userName, { color: themeColors.text }]}>
-              {user?.name || 'Jugador'}
-            </Text>
+            <Text style={[styles.greeting, { color: theme.textSecondary }]}>Hola,</Text>
+            <Text style={[styles.userName, { color: theme.text }]}>{userName}</Text>
           </View>
           <TouchableOpacity
-            style={[styles.iconButton, { backgroundColor: appColors.card }]}
-            onPress={() => console.log('Notifications tapped')}
+            style={styles.notificationButton}
+            onPress={() => router.push('/notifications')}
           >
             <IconSymbol
-              ios_icon_name="bell"
+              ios_icon_name="bell.fill"
               android_material_icon_name="notifications"
               size={24}
-              color={themeColors.text}
+              color={theme.text}
             />
+            {unreadCount > 0 && (
+              <View style={[styles.badge, { backgroundColor: theme.error }]}>
+                <Text style={styles.badgeText}>{unreadCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: themeColors.text }]}>
-            Acciones Rápidas
-          </Text>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Acciones Rápidas</Text>
           <View style={styles.quickActions}>
             <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: appColors.primary }]}
-              onPress={() => console.log('User tapped Nueva Reserva')}
+              style={[styles.actionCard, { backgroundColor: theme.card }]}
+              onPress={() => router.push('/booking/new')}
             >
-              <IconSymbol
-                ios_icon_name="plus.circle"
-                android_material_icon_name="add-circle"
-                size={32}
-                color="#FFFFFF"
-              />
-              <Text style={styles.actionCardTitle}>
-                Nueva Reserva
-              </Text>
-              <Text style={styles.actionCardSubtitle}>
-                Reserva una cancha
-              </Text>
+              <View style={[styles.actionIcon, { backgroundColor: theme.primary + '20' }]}>
+                <IconSymbol
+                  ios_icon_name="calendar.badge.plus"
+                  android_material_icon_name="add-circle"
+                  size={28}
+                  color={theme.primary}
+                />
+              </View>
+              <Text style={[styles.actionText, { color: theme.text }]}>Nueva Reserva</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: appColors.secondary }]}
-              onPress={() => console.log('User tapped Mis Clubes')}
+              style={[styles.actionCard, { backgroundColor: theme.card }]}
+              onPress={() => router.push('/clubs')}
             >
-              <IconSymbol
-                ios_icon_name="building.2"
-                android_material_icon_name="store"
-                size={32}
-                color="#FFFFFF"
-              />
-              <Text style={styles.actionCardTitle}>
-                Mis Clubes
-              </Text>
-              <Text style={styles.actionCardSubtitle}>
-                Ver clubes
-              </Text>
+              <View style={[styles.actionIcon, { backgroundColor: theme.secondary + '20' }]}>
+                <IconSymbol
+                  ios_icon_name="building.2.fill"
+                  android_material_icon_name="business"
+                  size={28}
+                  color={theme.secondary}
+                />
+              </View>
+              <Text style={[styles.actionText, { color: theme.text }]}>Mis Clubes</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: theme.card }]}
+              onPress={() => router.push('/(tabs)/tournaments')}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: theme.accent + '20' }]}>
+                <IconSymbol
+                  ios_icon_name="trophy.fill"
+                  android_material_icon_name="emoji-events"
+                  size={28}
+                  color={theme.accent}
+                />
+              </View>
+              <Text style={[styles.actionText, { color: theme.text }]}>Torneos</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -177,135 +213,125 @@ export default function HomeScreen() {
         {/* Upcoming Bookings */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: themeColors.text }]}>
-              Próximas Reservas
-            </Text>
-            {hasUpcomingBookings && (
-              <TouchableOpacity onPress={() => console.log('Ver todas tapped')}>
-                <Text style={[styles.seeAllText, { color: appColors.primary }]}>
-                  Ver todas
-                </Text>
-              </TouchableOpacity>
-            )}
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Próximas Reservas</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/bookings')}>
+              <Text style={[styles.seeAll, { color: theme.primary }]}>Ver todas</Text>
+            </TouchableOpacity>
           </View>
-
-          {!hasUpcomingBookings ? (
-            <View style={[styles.emptyCard, { backgroundColor: appColors.card }]}>
+          
+          {upcomingBookings.length === 0 ? (
+            <View style={[styles.emptyCard, { backgroundColor: theme.card }]}>
               <IconSymbol
                 ios_icon_name="calendar"
                 android_material_icon_name="calendar-today"
                 size={48}
-                color={appColors.textSecondary}
+                color={theme.textSecondary}
               />
-              <Text style={[styles.emptyTitle, { color: themeColors.text }]}>
-                No tienes reservas
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                No tienes reservas próximas
               </Text>
-              <Text style={[styles.emptySubtitle, { color: appColors.textSecondary }]}>
-                Crea tu primera reserva para empezar a jugar
-              </Text>
+              <TouchableOpacity
+                style={[styles.emptyButton, { backgroundColor: theme.primary }]}
+                onPress={() => router.push('/booking/new')}
+              >
+                <Text style={styles.emptyButtonText}>Hacer una reserva</Text>
+              </TouchableOpacity>
             </View>
           ) : (
-            <View>
-              {upcomingBookings.map((booking, index) => {
-                const dateText = booking.bookingDate;
-                const timeText = `${booking.startTime} - ${booking.endTime}`;
-                
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    style={[styles.bookingCard, { backgroundColor: appColors.card }]}
-                    onPress={() => console.log('Booking tapped:', booking.id)}
-                  >
-                    <View style={styles.bookingHeader}>
-                      <View style={[styles.statusBadge, { backgroundColor: appColors.success }]}>
-                        <Text style={styles.statusText}>
-                          Confirmada
-                        </Text>
-                      </View>
+            upcomingBookings.map((booking) => {
+              const dateText = booking.bookingDate;
+              const timeText = `${booking.startTime} - ${booking.endTime}`;
+              
+              return (
+                <TouchableOpacity
+                  key={booking.id}
+                  style={[styles.bookingCard, { backgroundColor: theme.card }]}
+                  onPress={() => router.push(`/booking/${booking.id}`)}
+                >
+                  <View style={styles.bookingHeader}>
+                    <View style={[styles.statusBadge, { backgroundColor: theme.success + '20' }]}>
+                      <Text style={[styles.statusText, { color: theme.success }]}>Confirmada</Text>
+                    </View>
+                    <IconSymbol
+                      ios_icon_name="qrcode"
+                      android_material_icon_name="qr-code"
+                      size={24}
+                      color={theme.primary}
+                    />
+                  </View>
+                  <Text style={[styles.bookingClub, { color: theme.text }]}>{booking.clubName}</Text>
+                  <Text style={[styles.bookingCourt, { color: theme.textSecondary }]}>
+                    {booking.courtName}
+                  </Text>
+                  <View style={styles.bookingDetails}>
+                    <View style={styles.bookingDetail}>
                       <IconSymbol
-                        ios_icon_name="qrcode"
-                        android_material_icon_name="qr-code"
-                        size={24}
-                        color={appColors.primary}
+                        ios_icon_name="calendar"
+                        android_material_icon_name="calendar-today"
+                        size={16}
+                        color={theme.textSecondary}
                       />
+                      <Text style={[styles.bookingDetailText, { color: theme.textSecondary }]}>
+                        {dateText}
+                      </Text>
                     </View>
-                    
-                    <Text style={[styles.bookingClub, { color: themeColors.text }]}>
-                      {booking.clubName}
-                    </Text>
-                    <Text style={[styles.bookingCourt, { color: appColors.textSecondary }]}>
-                      {booking.courtName}
-                    </Text>
-                    
-                    <View style={styles.bookingDetails}>
-                      <View style={styles.bookingDetailItem}>
-                        <IconSymbol
-                          ios_icon_name="calendar"
-                          android_material_icon_name="calendar-today"
-                          size={16}
-                          color={appColors.textSecondary}
-                        />
-                        <Text style={[styles.bookingDetailText, { color: appColors.textSecondary }]}>
-                          {dateText}
-                        </Text>
-                      </View>
-                      <View style={styles.bookingDetailItem}>
-                        <IconSymbol
-                          ios_icon_name="clock"
-                          android_material_icon_name="access-time"
-                          size={16}
-                          color={appColors.textSecondary}
-                        />
-                        <Text style={[styles.bookingDetailText, { color: appColors.textSecondary }]}>
-                          {timeText}
-                        </Text>
-                      </View>
+                    <View style={styles.bookingDetail}>
+                      <IconSymbol
+                        ios_icon_name="clock"
+                        android_material_icon_name="access-time"
+                        size={16}
+                        color={theme.textSecondary}
+                      />
+                      <Text style={[styles.bookingDetailText, { color: theme.textSecondary }]}>
+                        {timeText}
+                      </Text>
                     </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
 
-        {/* Available Clubs */}
-        {clubs.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: themeColors.text }]}>
-              Clubes Disponibles
-            </Text>
-            {clubs.map((club, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[styles.clubCard, { backgroundColor: appColors.card }]}
-                onPress={() => console.log('Club tapped:', club.id)}
-              >
-                <View style={[styles.clubIcon, { backgroundColor: appColors.highlight }]}>
-                  <IconSymbol
-                    ios_icon_name="building.2"
-                    android_material_icon_name="store"
-                    size={24}
-                    color={appColors.primary}
-                  />
-                </View>
-                <View style={styles.clubInfo}>
-                  <Text style={[styles.clubName, { color: themeColors.text }]}>
-                    {club.name}
-                  </Text>
-                  <Text style={[styles.clubAddress, { color: appColors.textSecondary }]}>
-                    {club.address}
-                  </Text>
-                </View>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="chevron-right"
-                  size={24}
-                  color={appColors.textSecondary}
-                />
-              </TouchableOpacity>
-            ))}
+        {/* My Clubs */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Mis Clubes</Text>
+            <TouchableOpacity onPress={() => router.push('/clubs')}>
+              <Text style={[styles.seeAll, { color: theme.primary }]}>Ver todos</Text>
+            </TouchableOpacity>
           </View>
-        )}
+          
+          {myClubs.map((club) => (
+            <TouchableOpacity
+              key={club.id}
+              style={[styles.clubCard, { backgroundColor: theme.card }]}
+              onPress={() => router.push(`/club/${club.id}`)}
+            >
+              <View style={[styles.clubIcon, { backgroundColor: theme.primary + '20' }]}>
+                <IconSymbol
+                  ios_icon_name="building.2.fill"
+                  android_material_icon_name="business"
+                  size={24}
+                  color={theme.primary}
+                />
+              </View>
+              <View style={styles.clubInfo}>
+                <Text style={[styles.clubName, { color: theme.text }]}>{club.name}</Text>
+                <Text style={[styles.clubAddress, { color: theme.textSecondary }]}>
+                  {club.address}
+                </Text>
+                <Text style={[styles.clubCity, { color: theme.textSecondary }]}>{club.city}</Text>
+              </View>
+              <IconSymbol
+                ios_icon_name="chevron.right"
+                android_material_icon_name="chevron-right"
+                size={20}
+                color={theme.textSecondary}
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -315,16 +341,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   scrollView: {
     flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 100,
   },
   header: {
     flexDirection: 'row',
@@ -332,26 +350,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 24,
+    paddingBottom: 16,
   },
   greeting: {
-    fontSize: 14,
+    fontSize: 16,
     marginBottom: 4,
   },
   userName: {
     fontSize: 28,
     fontWeight: 'bold',
   },
-  iconButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
+  notificationButton: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   section: {
     paddingHorizontal: 20,
-    marginBottom: 32,
+    marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -363,57 +393,74 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
-  seeAllText: {
+  seeAll: {
     fontSize: 14,
     fontWeight: '600',
   },
   quickActions: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     gap: 12,
   },
   actionCard: {
     flex: 1,
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  actionIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 140,
+    marginBottom: 12,
   },
-  actionCardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  actionCardSubtitle: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    opacity: 0.9,
-    marginTop: 4,
+  actionText: {
+    fontSize: 13,
+    fontWeight: '600',
     textAlign: 'center',
   },
   emptyCard: {
     borderRadius: 16,
     padding: 32,
     alignItems: 'center',
-    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  emptyText: {
+    fontSize: 16,
     marginTop: 16,
+    marginBottom: 20,
     textAlign: 'center',
   },
-  emptySubtitle: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
+  emptyButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  emptyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
   },
   bookingCard: {
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   bookingHeader: {
     flexDirection: 'row',
@@ -424,12 +471,11 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 8,
   },
   statusText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFFFFF',
   },
   bookingClub: {
     fontSize: 18,
@@ -444,7 +490,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
   },
-  bookingDetailItem: {
+  bookingDetail: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -458,13 +504,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   clubIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
   },
   clubInfo: {
@@ -472,10 +523,14 @@ const styles = StyleSheet.create({
   },
   clubName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
     marginBottom: 4,
   },
   clubAddress: {
-    fontSize: 14,
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  clubCity: {
+    fontSize: 13,
   },
 });

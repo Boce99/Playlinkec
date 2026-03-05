@@ -1,244 +1,242 @@
 
-import { useTheme } from "@react-navigation/native";
-import { IconSymbol } from "@/components/IconSymbol";
+import React, { useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
+  StyleSheet,
   useColorScheme,
   ActivityIndicator,
   Modal,
-} from "react-native";
-import React, { useState } from "react";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "@/styles/commonStyles";
-import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "expo-router";
+  Platform,
+} from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '@/contexts/AuthContext';
+import { IconSymbol } from '@/components/IconSymbol';
+import { colors } from '@/styles/commonStyles';
 
 export default function ProfileScreen() {
-  const { colors: themeColors } = useTheme();
   const colorScheme = useColorScheme();
-  const appColors = colorScheme === 'dark' ? colors.dark : colors.light;
-  const { user, signOut, loading } = useAuth();
+  const theme = colors[colorScheme ?? 'light'];
   const router = useRouter();
+  const { user, signOut } = useAuth();
   const [showSignOutModal, setShowSignOutModal] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = async () => {
-    console.log('User confirmed sign out');
+    console.log('ProfileScreen: User initiated sign out');
     setSigningOut(true);
     try {
       await signOut();
-      console.log('Sign out successful, redirecting to auth');
+      console.log('ProfileScreen: Sign out successful');
       setShowSignOutModal(false);
-      router.replace('/auth');
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error('ProfileScreen: Sign out error:', error);
     } finally {
       setSigningOut(false);
     }
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={appColors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const userName = user?.name || 'Usuario';
+  const userEmail = user?.email || '';
 
-  const userInitials = user?.name
-    ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : 'U';
+  // Mock stats - TODO: Backend Integration - GET /api/stats/user
+  const stats = {
+    bookings: 12,
+    clubs: 2,
+    matches: 24,
+    wins: 15,
+    losses: 9,
+    winRate: 62,
+  };
+
+  const winRateText = `${stats.winRate}%`;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <Stack.Screen options={{ title: 'Perfil', headerShown: true }} />
+      
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color: themeColors.text }]}>
-            Perfil
-          </Text>
-        </View>
-
-        {/* Profile Card */}
-        <View style={[styles.profileCard, { backgroundColor: appColors.card }]}>
-          <View style={[styles.avatar, { backgroundColor: appColors.primary }]}>
-            <Text style={styles.avatarText}>
-              {userInitials}
+        {/* Profile Header */}
+        <View style={[styles.profileHeader, Platform.OS === 'android' && { paddingTop: 48 }]}>
+          <View style={[styles.avatar, { backgroundColor: theme.primary + '20' }]}>
+            <Text style={[styles.avatarText, { color: theme.primary }]}>
+              {userName.charAt(0).toUpperCase()}
             </Text>
           </View>
-          <Text style={[styles.userName, { color: themeColors.text }]}>
-            {user?.name || 'Usuario'}
-          </Text>
-          <Text style={[styles.userEmail, { color: appColors.textSecondary }]}>
-            {user?.email || ''}
-          </Text>
+          <Text style={[styles.userName, { color: theme.text }]}>{userName}</Text>
+          <Text style={[styles.userEmail, { color: theme.textSecondary }]}>{userEmail}</Text>
         </View>
 
-        {/* Stats */}
+        {/* Stats Cards */}
         <View style={styles.statsContainer}>
-          <View style={[styles.statCard, { backgroundColor: appColors.card }]}>
-            <Text style={[styles.statValue, { color: themeColors.text }]}>
-              0
-            </Text>
-            <Text style={[styles.statLabel, { color: appColors.textSecondary }]}>
-              Reservas
-            </Text>
+          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+            <Text style={[styles.statValue, { color: theme.primary }]}>{stats.bookings}</Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Reservas</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: appColors.card }]}>
-            <Text style={[styles.statValue, { color: themeColors.text }]}>
-              0
-            </Text>
-            <Text style={[styles.statLabel, { color: appColors.textSecondary }]}>
-              Clubes
-            </Text>
+          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+            <Text style={[styles.statValue, { color: theme.secondary }]}>{stats.clubs}</Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Clubes</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: appColors.card }]}>
-            <Text style={[styles.statValue, { color: themeColors.text }]}>
-              0
-            </Text>
-            <Text style={[styles.statLabel, { color: appColors.textSecondary }]}>
-              Partidos
-            </Text>
+          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+            <Text style={[styles.statValue, { color: theme.accent }]}>{stats.matches}</Text>
+            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Partidos</Text>
+          </View>
+        </View>
+
+        {/* Performance Stats */}
+        <View style={[styles.performanceCard, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Rendimiento</Text>
+          <View style={styles.performanceRow}>
+            <View style={styles.performanceStat}>
+              <Text style={[styles.performanceValue, { color: theme.success }]}>{stats.wins}</Text>
+              <Text style={[styles.performanceLabel, { color: theme.textSecondary }]}>Victorias</Text>
+            </View>
+            <View style={styles.performanceStat}>
+              <Text style={[styles.performanceValue, { color: theme.error }]}>{stats.losses}</Text>
+              <Text style={[styles.performanceLabel, { color: theme.textSecondary }]}>Derrotas</Text>
+            </View>
+            <View style={styles.performanceStat}>
+              <Text style={[styles.performanceValue, { color: theme.primary }]}>{winRateText}</Text>
+              <Text style={[styles.performanceLabel, { color: theme.textSecondary }]}>% Victoria</Text>
+            </View>
           </View>
         </View>
 
         {/* Menu Items */}
         <View style={styles.menuSection}>
           <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: appColors.card }]}
-            onPress={() => console.log('Mis Clubes tapped')}
+            style={[styles.menuItem, { backgroundColor: theme.card }]}
+            onPress={() => router.push('/clubs')}
           >
             <View style={styles.menuItemLeft}>
               <IconSymbol
-                ios_icon_name="building.2"
-                android_material_icon_name="store"
+                ios_icon_name="building.2.fill"
+                android_material_icon_name="business"
                 size={24}
-                color={appColors.primary}
+                color={theme.primary}
               />
-              <Text style={[styles.menuItemText, { color: themeColors.text }]}>
-                Mis Clubes
-              </Text>
+              <Text style={[styles.menuItemText, { color: theme.text }]}>Mis Clubes</Text>
             </View>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
-              size={24}
-              color={appColors.textSecondary}
+              size={20}
+              color={theme.textSecondary}
             />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: appColors.card }]}
-            onPress={() => console.log('Historial de Reservas tapped')}
+            style={[styles.menuItem, { backgroundColor: theme.card }]}
+            onPress={() => router.push('/ranking')}
           >
             <View style={styles.menuItemLeft}>
               <IconSymbol
-                ios_icon_name="clock"
-                android_material_icon_name="history"
+                ios_icon_name="chart.bar.fill"
+                android_material_icon_name="bar-chart"
                 size={24}
-                color={appColors.primary}
+                color={theme.secondary}
               />
-              <Text style={[styles.menuItemText, { color: themeColors.text }]}>
-                Historial de Reservas
-              </Text>
+              <Text style={[styles.menuItemText, { color: theme.text }]}>Ranking</Text>
             </View>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
-              size={24}
-              color={appColors.textSecondary}
+              size={20}
+              color={theme.textSecondary}
             />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.menuItem, { backgroundColor: appColors.card }]}
-            onPress={() => console.log('Configuración tapped')}
+            style={[styles.menuItem, { backgroundColor: theme.card }]}
+            onPress={() => router.push('/stats')}
+          >
+            <View style={styles.menuItemLeft}>
+              <IconSymbol
+                ios_icon_name="chart.line.uptrend.xyaxis"
+                android_material_icon_name="show-chart"
+                size={24}
+                color={theme.accent}
+              />
+              <Text style={[styles.menuItemText, { color: theme.text }]}>Estadísticas</Text>
+            </View>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron-right"
+              size={20}
+              color={theme.textSecondary}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuItem, { backgroundColor: theme.card }]}
+            onPress={() => router.push('/settings')}
           >
             <View style={styles.menuItemLeft}>
               <IconSymbol
                 ios_icon_name="gear"
                 android_material_icon_name="settings"
                 size={24}
-                color={appColors.primary}
+                color={theme.textSecondary}
               />
-              <Text style={[styles.menuItemText, { color: themeColors.text }]}>
-                Configuración
-              </Text>
+              <Text style={[styles.menuItemText, { color: theme.text }]}>Ajustes</Text>
             </View>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="chevron-right"
-              size={24}
-              color={appColors.textSecondary}
+              size={20}
+              color={theme.textSecondary}
             />
           </TouchableOpacity>
         </View>
 
         {/* Sign Out Button */}
         <TouchableOpacity
-          style={[styles.signOutButton, { backgroundColor: appColors.card }]}
-          onPress={() => {
-            console.log('User tapped sign out button');
-            setShowSignOutModal(true);
-          }}
+          style={[styles.signOutButton, { backgroundColor: theme.error + '15' }]}
+          onPress={() => setShowSignOutModal(true)}
         >
           <IconSymbol
-            ios_icon_name="arrow.right.square"
+            ios_icon_name="rectangle.portrait.and.arrow.right"
             android_material_icon_name="logout"
-            size={24}
-            color={appColors.error}
+            size={20}
+            color={theme.error}
           />
-          <Text style={[styles.signOutText, { color: appColors.error }]}>
-            Cerrar Sesión
-          </Text>
+          <Text style={[styles.signOutText, { color: theme.error }]}>Cerrar Sesión</Text>
         </TouchableOpacity>
       </ScrollView>
 
       {/* Sign Out Confirmation Modal */}
       <Modal
         visible={showSignOutModal}
-        transparent
+        transparent={true}
         animationType="fade"
         onRequestClose={() => setShowSignOutModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: appColors.card }]}>
-            <Text style={[styles.modalTitle, { color: themeColors.text }]}>
-              Cerrar Sesión
-            </Text>
-            <Text style={[styles.modalMessage, { color: appColors.textSecondary }]}>
-              ¿Estás seguro que deseas cerrar sesión?
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Cerrar Sesión</Text>
+            <Text style={[styles.modalMessage, { color: theme.textSecondary }]}>
+              ¿Estás seguro que quieres cerrar sesión?
             </Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: appColors.background }]}
-                onPress={() => {
-                  console.log('User cancelled sign out');
-                  setShowSignOutModal(false);
-                }}
+                style={[styles.modalButton, { backgroundColor: theme.border }]}
+                onPress={() => setShowSignOutModal(false)}
                 disabled={signingOut}
               >
-                <Text style={[styles.modalButtonText, { color: themeColors.text }]}>
-                  Cancelar
-                </Text>
+                <Text style={[styles.modalButtonText, { color: theme.text }]}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, { backgroundColor: appColors.error }]}
+                style={[styles.modalButton, { backgroundColor: theme.error }]}
                 onPress={handleSignOut}
                 disabled={signingOut}
               >
                 {signingOut ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>
-                    Cerrar Sesión
-                  </Text>
+                  <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>Cerrar Sesión</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -253,45 +251,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
     paddingBottom: 24,
   },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  profileCard: {
-    marginHorizontal: 20,
-    borderRadius: 16,
-    padding: 24,
+  profileHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    paddingVertical: 32,
   },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
   },
   avatarText: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   userName: {
     fontSize: 24,
@@ -305,33 +285,74 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 20,
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   statCard: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
   },
+  performanceCard: {
+    marginHorizontal: 20,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  performanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  performanceStat: {
+    alignItems: 'center',
+  },
+  performanceValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  performanceLabel: {
+    fontSize: 12,
+  },
   menuSection: {
     paddingHorizontal: 20,
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   menuItemLeft: {
     flexDirection: 'row',
@@ -340,13 +361,13 @@ const styles = StyleSheet.create({
   },
   menuItemText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   signOutButton: {
-    marginHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginHorizontal: 20,
     borderRadius: 12,
     padding: 16,
     gap: 8,
@@ -363,10 +384,10 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalContent: {
-    borderRadius: 16,
-    padding: 24,
     width: '100%',
     maxWidth: 400,
+    borderRadius: 20,
+    padding: 24,
   },
   modalTitle: {
     fontSize: 20,
@@ -378,6 +399,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 24,
     textAlign: 'center',
+    lineHeight: 24,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -385,10 +407,9 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
+    paddingVertical: 14,
     borderRadius: 12,
-    padding: 16,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   modalButtonText: {
     fontSize: 16,
